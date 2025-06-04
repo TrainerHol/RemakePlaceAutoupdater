@@ -42,19 +42,16 @@ jobs:
           copy "launch_updater.bat" "artifacts\"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ReMakeplaceUpdater-${{ github.sha }}
           path: artifacts/
 
-      - name: Create release on tag
+      - name: Create release and upload assets
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: ReMakeplace Updater ${{ github.ref_name }}
+          name: ReMakeplace Updater ${{ github.ref_name }}
           body: |
             ## ReMakeplace Auto-Updater ${{ github.ref_name }}
 
@@ -79,16 +76,22 @@ jobs:
             2. Browse to your ReMakeplace installation folder
             3. Click "Save & Continue"
             4. Enjoy automatic updates!
+
+            ---
+
+            **Full Package Contents:**
+            - `ReMakeplaceUpdater.exe` - Main executable (download this)
+            - `config.json` - Configuration template
+            - `README.md` - Documentation
+            - `requirements.txt` - For developers
+            - `launch_updater.bat` - Alternative launcher
           draft: false
           prerelease: false
-
-      - name: Upload release asset
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-release-asset@v1
+          files: |
+            artifacts/ReMakeplaceUpdater.exe
+            artifacts/config.json
+            artifacts/README.md
+            artifacts/requirements.txt
+            artifacts/launch_updater.bat
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/ReMakeplaceUpdater.exe
-          asset_name: ReMakeplaceUpdater.exe
-          asset_content_type: application/octet-stream
