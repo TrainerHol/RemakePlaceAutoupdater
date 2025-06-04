@@ -25,27 +25,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build executable
+      - name: Build standalone executable
         run: |
-          python setup.py build
-
-      - name: Create artifact directory
-        run: |
-          mkdir artifacts
-
-      - name: Copy executable and files
-        run: |
-          copy "dist\ReMakeplaceUpdater.exe" "artifacts\"
-          copy "config.json" "artifacts\"
-          copy "README.md" "artifacts\"
-          copy "requirements.txt" "artifacts\"
-          copy "launch_updater.bat" "artifacts\"
+          python build.py
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ReMakeplaceUpdater-${{ github.sha }}
-          path: artifacts/
+          path: release/
 
       - name: Create release and upload assets
         if: startsWith(github.ref, 'refs/tags/v')
@@ -55,6 +43,10 @@ jobs:
           body: |
             ## ReMakeplace Auto-Updater ${{ github.ref_name }}
 
+            **🎉 Standalone Executable - No Python Required!**
+
+            This is a completely self-contained executable that runs on any Windows system without needing Python installed.
+
             **What's New:**
             - Auto-update functionality for ReMakeplace
             - Modern MMO-style launcher interface
@@ -62,36 +54,35 @@ jobs:
             - Multi-method extraction (supports BCJ2 filters)
             - Installation path configuration with validation
 
-            **Download:**
-            - Download `ReMakeplaceUpdater.exe` below
-            - Run the executable to set up your ReMakeplace installation
-            - The updater will guide you through the initial setup
+            **Download & Install:**
+            1. Download `ReMakeplaceUpdater.exe` below
+            2. Run the executable (no installation needed!)
+            3. Browse to your ReMakeplace installation folder
+            4. Click "Save & Continue"
+            5. Enjoy automatic updates!
 
             **Requirements:**
-            - Windows 10/11
+            - Windows 10/11 (no Python needed!)
             - For advanced 7z formats: Install [7-Zip](https://www.7-zip.org/)
 
-            **First Time Setup:**
-            1. Run `ReMakeplaceUpdater.exe`
-            2. Browse to your ReMakeplace installation folder
-            3. Click "Save & Continue"
-            4. Enjoy automatic updates!
+            **For Friends & Distribution:**
+            - Just send them the `ReMakeplaceUpdater.exe` file
+            - No additional setup or dependencies required
+            - Works on any Windows computer
 
             ---
 
-            **Full Package Contents:**
-            - `ReMakeplaceUpdater.exe` - Main executable (download this)
+            **Package Contents:**
+            - `ReMakeplaceUpdater.exe` - **Main executable (download this!)**
             - `config.json` - Configuration template
-            - `README.md` - Documentation
-            - `requirements.txt` - For developers
+            - `README.md` - Full documentation
             - `launch_updater.bat` - Alternative launcher
           draft: false
           prerelease: false
           files: |
-            artifacts/ReMakeplaceUpdater.exe
-            artifacts/config.json
-            artifacts/README.md
-            artifacts/requirements.txt
-            artifacts/launch_updater.bat
+            release/ReMakeplaceUpdater.exe
+            release/config.json
+            release/README.md
+            release/launch_updater.bat
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
