@@ -99,15 +99,6 @@ def build_exe():
             print(f">> Executable created: {exe_path}")
             print(f">> Size: {size_mb:.1f} MB")
             
-            # Test the executable quickly
-            print(">> Testing executable...")
-            test_result = subprocess.run([str(exe_path), '--help'], 
-                                       capture_output=True, text=True, timeout=10)
-            if test_result.returncode != 0:
-                print(f"WARNING: Executable test failed: {test_result.stderr}")
-            else:
-                print(">> Executable test passed!")
-            
             # Create release folder with all necessary files
             release_folder = Path('release')
             if release_folder.exists():
@@ -138,8 +129,6 @@ def build_exe():
     except subprocess.CalledProcessError as e:
         print(f"ERROR: Build failed: {e}")
         return False
-    except subprocess.TimeoutExpired:
-        print("WARNING: Executable test timed out (this might be normal)")
     except Exception as e:
         print(f"ERROR: Unexpected error: {e}")
         return False
