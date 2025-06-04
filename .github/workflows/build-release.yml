@@ -1,0 +1,94 @@
+name: Build and Release ReMakeplace Updater
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build executable
+        run: |
+          python setup.py build
+
+      - name: Create artifact directory
+        run: |
+          mkdir artifacts
+
+      - name: Copy executable and files
+        run: |
+          copy "dist\ReMakeplaceUpdater.exe" "artifacts\"
+          copy "config.json" "artifacts\"
+          copy "README.md" "artifacts\"
+          copy "requirements.txt" "artifacts\"
+          copy "launch_updater.bat" "artifacts\"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ReMakeplaceUpdater-${{ github.sha }}
+          path: artifacts/
+
+      - name: Create release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ReMakeplace Updater ${{ github.ref_name }}
+          body: |
+            ## ReMakeplace Auto-Updater ${{ github.ref_name }}
+
+            **What's New:**
+            - Auto-update functionality for ReMakeplace
+            - Modern MMO-style launcher interface
+            - Smart caching system to avoid re-downloads
+            - Multi-method extraction (supports BCJ2 filters)
+            - Installation path configuration with validation
+
+            **Download:**
+            - Download `ReMakeplaceUpdater.exe` below
+            - Run the executable to set up your ReMakeplace installation
+            - The updater will guide you through the initial setup
+
+            **Requirements:**
+            - Windows 10/11
+            - For advanced 7z formats: Install [7-Zip](https://www.7-zip.org/)
+
+            **First Time Setup:**
+            1. Run `ReMakeplaceUpdater.exe`
+            2. Browse to your ReMakeplace installation folder
+            3. Click "Save & Continue"
+            4. Enjoy automatic updates!
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/ReMakeplaceUpdater.exe
+          asset_name: ReMakeplaceUpdater.exe
+          asset_content_type: application/octet-stream
