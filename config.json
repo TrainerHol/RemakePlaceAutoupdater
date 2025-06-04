@@ -1,0 +1,13 @@
+{
+    "current_version": "7.25.0",
+    "github_repo": "RemakePlace/app",
+    "installation_path": "O:\\Games\\itch\\re-makeplace\\ReMakeplace",
+    "exe_path": "Makeplace.exe",
+    "preserve_folders": [
+        "Makeplace/Custom",
+        "Makeplace/Save"
+    ],
+    "update_check_url": "https://api.github.com/repos/RemakePlace/app/releases/latest",
+    "last_check": "2025-06-03T23:01:28.574023",
+    "auto_check": true
+}
