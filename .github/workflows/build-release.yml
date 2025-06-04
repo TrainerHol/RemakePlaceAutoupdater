@@ -47,35 +47,6 @@ jobs:
           body: |
             ## ReMakeplace Auto-Updater ${{ github.ref_name }}
 
-            **🎉 Standalone Executable - No Python Required!**
-
-            This is a completely self-contained executable that runs on any Windows system without needing Python installed.
-
-            **What's New:**
-            - Auto-update functionality for ReMakeplace
-            - Modern MMO-style launcher interface
-            - Smart caching system to avoid re-downloads
-            - Multi-method extraction (supports BCJ2 filters)
-            - Installation path configuration with validation
-
-            **Download & Install:**
-            1. Download `ReMakeplaceUpdater.exe` below
-            2. Run the executable (no installation needed!)
-            3. Browse to your ReMakeplace installation folder
-            4. Click "Save & Continue"
-            5. Enjoy automatic updates!
-
-            **Requirements:**
-            - Windows 10/11 (no Python needed!)
-            - For advanced 7z formats: Install [7-Zip](https://www.7-zip.org/)
-
-            **For Friends & Distribution:**
-            - Just send them the `ReMakeplaceUpdater.exe` file
-            - No additional setup or dependencies required
-            - Works on any Windows computer
-
-            ---
-
             **Package Contents:**
             - `ReMakeplaceUpdater.exe` - **Main executable (download this!)**
             - `config.json` - Configuration template
