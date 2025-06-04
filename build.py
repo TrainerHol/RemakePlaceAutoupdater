@@ -21,35 +21,64 @@ def build_exe():
             print(f">> Cleaning {folder}/")
             shutil.rmtree(folder)
     
-    # PyInstaller command with optimized settings
+    # Remove any existing spec file
+    spec_file = Path('ReMakeplaceUpdater.spec')
+    if spec_file.exists():
+        spec_file.unlink()
+    
+    # PyInstaller command with robust settings for CustomTkinter
     cmd = [
         'pyinstaller',
         '--onefile',                    # Single executable file
-        '--windowed',                   # No console window (GUI app)
+        '--noconsole',                  # No console window (better than --windowed)
         '--name=ReMakeplaceUpdater',    # Output executable name
-        '--icon=NONE',                  # No icon (you can add one later)
+        
+        # Collect all submodules to avoid DLL issues
+        '--collect-all=customtkinter',
+        '--collect-all=tkinter',
+        '--collect-all=PIL',
+        '--collect-all=requests',
+        '--collect-all=urllib3',
+        '--collect-all=certifi',
+        '--collect-all=charset_normalizer',
+        '--collect-all=idna',
         
         # Include all necessary modules explicitly
         '--hidden-import=customtkinter',
-        '--hidden-import=PIL',
-        '--hidden-import=PIL._tkinter_finder',
-        '--hidden-import=requests',
-        '--hidden-import=py7zr',
-        '--hidden-import=packaging',
-        '--hidden-import=packaging.version',
         '--hidden-import=tkinter',
         '--hidden-import=tkinter.filedialog',
         '--hidden-import=tkinter.messagebox',
+        '--hidden-import=PIL',
+        '--hidden-import=PIL._tkinter_finder',
+        '--hidden-import=PIL.Image',
+        '--hidden-import=PIL.ImageTk',
+        '--hidden-import=requests',
+        '--hidden-import=urllib3',
+        '--hidden-import=py7zr',
+        '--hidden-import=packaging',
+        '--hidden-import=packaging.version',
+        '--hidden-import=json',
+        '--hidden-import=subprocess',
+        '--hidden-import=threading',
+        '--hidden-import=datetime',
+        '--hidden-import=pathlib',
+        '--hidden-import=shutil',
+        '--hidden-import=time',
         
         # Add data files
         '--add-data=config.json;.',
         
-        # Optimization
-        '--optimize=2',
-        '--strip',
+        # Runtime options to prevent DLL issues
+        '--runtime-tmpdir=.',           # Use current directory instead of temp
+        '--distpath=dist',
+        '--workpath=build',
+        
+        # Don't optimize too aggressively (can cause issues)
+        '--debug=bootloader',           # Help debug DLL issues
         
         # Clean build
         '--clean',
+        '--noconfirm',
         
         # Main script
         'updater.py'
@@ -59,7 +88,8 @@ def build_exe():
     print(f"Command: {' '.join(cmd)}")
     
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        # Run with more verbose output to catch issues
+        result = subprocess.run(cmd, check=True, text=True)
         print(">> Build successful!")
         
         # Check if executable was created
@@ -68,6 +98,15 @@ def build_exe():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
             print(f">> Executable created: {exe_path}")
             print(f">> Size: {size_mb:.1f} MB")
+            
+            # Test the executable quickly
+            print(">> Testing executable...")
+            test_result = subprocess.run([str(exe_path), '--help'], 
+                                       capture_output=True, text=True, timeout=10)
+            if test_result.returncode != 0:
+                print(f"WARNING: Executable test failed: {test_result.stderr}")
+            else:
+                print(">> Executable test passed!")
             
             # Create release folder with all necessary files
             release_folder = Path('release')
@@ -98,10 +137,11 @@ def build_exe():
             
     except subprocess.CalledProcessError as e:
         print(f"ERROR: Build failed: {e}")
-        if e.stdout:
-            print(f"STDOUT: {e.stdout}")
-        if e.stderr:
-            print(f"STDERR: {e.stderr}")
+        return False
+    except subprocess.TimeoutExpired:
+        print("WARNING: Executable test timed out (this might be normal)")
+    except Exception as e:
+        print(f"ERROR: Unexpected error: {e}")
         return False
     
     return True

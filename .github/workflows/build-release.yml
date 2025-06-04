@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build:
     runs-on: windows-latest
@@ -37,7 +41,7 @@ jobs:
 
       - name: Create release and upload assets
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: ReMakeplace Updater ${{ github.ref_name }}
           body: |
