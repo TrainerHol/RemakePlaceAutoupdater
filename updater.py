@@ -45,6 +45,7 @@ class ReMakeplaceUpdater:
         self.download_url = None
         self.download_progress = 0
         self.download_speed = 0
+        self.update_performed = False  # Track if an update was actually performed
         
         # Check if installation path is configured
         if not self.validate_installation_path():
@@ -520,11 +521,20 @@ class ReMakeplaceUpdater:
             self.config["last_check"] = datetime.now().isoformat()
             self.save_config()
             
+            # Mark that an update was performed
+            self.update_performed = True
+            
             # Clean up old cache files and temp directories
             self.cleanup_cache(cache_dir, keep_current=True)
-            temp_dir = Path("temp_update")
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            # Clean up any temporary directories safely
+            temp_directories = [Path("temp_update"), Path("temp_backup")]
+            for temp_dir in temp_directories:
+                if temp_dir.exists():
+                    try:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                    except Exception as e:
+                        print(f"Warning: Could not remove temporary directory {temp_dir}: {e}")
             
             # Update UI
             self.root.after(0, self.update_complete)
@@ -540,12 +550,16 @@ class ReMakeplaceUpdater:
             if not cache_dir.exists():
                 return
             
-            current_version_prefix = f"v{self.latest_version}_" if keep_current else None
+            # Only set version prefix if we have a valid latest_version
+            current_version_prefix = None
+            if keep_current and self.latest_version:
+                current_version_prefix = f"v{self.latest_version}_"
+            
             files_removed = 0
             
             for file in cache_dir.iterdir():
                 if file.is_file():
-                    # Keep current version if specified
+                    # Keep current version if specified and we have a valid prefix
                     if keep_current and current_version_prefix and file.name.startswith(current_version_prefix):
                         continue
                     
@@ -564,14 +578,17 @@ class ReMakeplaceUpdater:
                         cache_dir.rmdir()
                     else:
                         print(f"Cache directory not empty, keeping: {list(cache_dir.iterdir())}")
-                except OSError as e:
+                except (OSError, PermissionError, FileNotFoundError) as e:
                     print(f"Could not remove cache directory: {e}")
+                    # Silent failure - don't show error to user
             
             if files_removed > 0:
                 print(f"Cleaned up {files_removed} cached file(s)")
                     
         except Exception as e:
             print(f"Cache cleanup error: {e}")
+            # Don't show error dialog to user - just log it
+            # This prevents the "Failed to remove temporary directory" popup
     
     def download_file(self, url, filepath):
         """Download file with progress tracking"""
@@ -636,12 +653,20 @@ class ReMakeplaceUpdater:
             
             self.root.after(0, lambda: self.progress_label.configure(text="Backing up user data..."))
             
+            # Backup preserve_folders (Custom and Save directories)
             for folder in self.config["preserve_folders"]:
                 src = installation_path / folder
                 if src.exists():
                     dst = backup_dir / folder
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copytree(src, dst, dirs_exist_ok=True)
+            
+            # Backup config.json if it exists in the installation directory
+            config_src = installation_path / "config.json"
+            if config_src.exists():
+                config_dst = backup_dir / "config.json"
+                config_dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(config_src, config_dst)
             
             # Extract new files to installation directory
             self.root.after(0, lambda: self.progress_label.configure(text="Extracting update files..."))
@@ -708,6 +733,7 @@ class ReMakeplaceUpdater:
             # Restore user data
             self.root.after(0, lambda: self.progress_label.configure(text="Restoring user data..."))
             
+            # Restore preserve_folders (Custom and Save directories)
             for folder in self.config["preserve_folders"]:
                 backup_src = backup_dir / folder
                 if backup_src.exists():
@@ -715,6 +741,12 @@ class ReMakeplaceUpdater:
                     if dst.exists():
                         shutil.rmtree(dst)
                     shutil.copytree(backup_src, dst)
+            
+            # Restore config.json if it was backed up
+            config_backup_src = backup_dir / "config.json"
+            if config_backup_src.exists():
+                config_dst = installation_path / "config.json"
+                shutil.copy2(config_backup_src, config_dst)
             
             # Cleanup backup
             shutil.rmtree(backup_dir, ignore_errors=True)
@@ -735,16 +767,22 @@ class ReMakeplaceUpdater:
         self.launch_button.configure(state="normal")
         self.update_available = False
         
-        # Clean up all cache files after successful update
-        self.root.after(0, lambda: self.progress_label.configure(text="Cleaning up cache..."))
-        try:
-            cache_dir = Path("update_cache")
-            self.cleanup_cache(cache_dir, keep_current=False)
-        except Exception as e:
-            print(f"Cache cleanup failed: {e}")
-        
-        # Small delay to show cleanup message, then hide progress
-        self.root.after(1000, lambda: self.progress_frame.pack_forget())
+        # Clean up all cache files after successful update (only if update was actually performed)
+        if self.update_performed:
+            self.root.after(0, lambda: self.progress_label.configure(text="Cleaning up cache..."))
+            try:
+                cache_dir = Path("update_cache")
+                # Only cleanup cache if we have a valid latest_version and cache directory exists
+                if self.latest_version and cache_dir.exists():
+                    self.cleanup_cache(cache_dir, keep_current=False)
+            except Exception as e:
+                print(f"Cache cleanup failed: {e}")
+            
+            # Small delay to show cleanup message, then hide progress
+            self.root.after(1000, lambda: self.progress_frame.pack_forget())
+        else:
+            # No update was performed, just hide progress immediately
+            self.progress_frame.pack_forget()
     
     def show_error(self, message):
         """Show error message"""
@@ -760,7 +798,13 @@ class ReMakeplaceUpdater:
         
         if exe_path.exists():
             try:
-                subprocess.Popen([str(exe_path)], cwd=str(installation_path))
+                # Launch game with suppressed output to prevent potential dialog boxes
+                subprocess.Popen(
+                    [str(exe_path)], 
+                    cwd=str(installation_path),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
                 self.root.quit()
             except Exception as e:
                 self.show_error(f"Failed to launch: {str(e)}")
