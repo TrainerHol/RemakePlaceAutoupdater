@@ -1,107 +1,143 @@
 # ReMakeplace Auto-Updater 🚀
 
-Launcher for ReMakeplace with automatic update functionality from GitHub releases.
+A modern, native auto-updater for ReMakeplace built with Tauri (Rust + TypeScript). Download updates directly from GitHub releases with smart caching and data preservation.
+
+## Features ✨
+
+- **🔒 Data Preservation**: Automatically preserves Custom and Save folders
+- **⚙️ Easy Setup**: Browse and configure installation path with validation
 
 ## Installation 📦
 
-### Prerequisites
+### Option 1: Download Pre-built Binary (Recommended)
 
-- Python 3.8 or higher
-- Windows (tested on 10)
+1. **Download from [Releases](https://github.com/TrainerHol/RemakePlaceAutoupdater/releases)**
 
-### Setup Instructions
+   - **Windows**: Download `.msi` installer or `.exe` portable
+   - **macOS**: Download `.dmg` installer or `.app.tar.gz` portable
+   - **Linux**: Download `.deb`, `.rpm`, or `.AppImage`
 
-1. **Download the updater files to any folder** (doesn't need to be in ReMakeplace folder)
+2. **Run the installer** or extract portable version
 
-   ```
-   ReMakeplaceUpdater/
-   ├── updater.py
-   ├── config.json
-   ├── requirements.txt
-   ├── setup.py
-   ├── launch_updater.bat
-   └── README.md
-   ```
-
-2. **Install Python dependencies**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Run the updater**
-
-   ```bash
-   python updater.py
-   ```
-
-   Or double-click `launch_updater.bat`
-
-4. **First Run Setup**
-   - On first launch, you'll see a welcome dialog
-   - Click "Browse" to select your ReMakeplace installation folder
-   - The updater will validate that `Makeplace.exe` exists in the selected folder
+3. **Launch and configure**
+   - On first run, click "Browse" to select your ReMakeplace installation folder
+   - The app validates that `Makeplace.exe` exists in the selected folder
    - Click "Save & Continue" to proceed
 
-## Building Executable (Optional) 🔨
+### Option 2: Build from Source
 
-To create a standalone `.exe` file:
+#### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) 1.70+
+- Platform-specific dependencies:
+  - **Linux**: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
+  - **Windows**: No additional dependencies needed
+  - **macOS**: No additional dependencies needed
+
+#### Build Steps
 
 ```bash
-python setup.py build
+# Clone the repository
+git clone https://github.com/TrainerHol/RemakePlaceAutoupdater.git
+cd RemakePlaceAutoupdater/ReMakeplaceUpdater
+
+# Install dependencies
+npm install
+
+# Development mode
+npm run tauri dev
+
+# Build release
+npm run tauri build
 ```
-
-The executable will be created in the `dist/` folder. You can then run `ReMakeplaceUpdater.exe` directly.
-
-### Data Protection
-
-Your important data is automatically preserved during updates:
-
-- `/Makeplace/Custom/` - Your custom layouts and configurations
-- `/Makeplace/Save/` - Your saved data
 
 ## Configuration ⚙️
 
-The `config.json` file contains all settings:
+The `config.json` file is automatically created with sensible defaults and you can change the repo to any other fork of Makeplace in the future:
 
 ```json
 {
-  "current_version": "7.2.5", // Your current version
-  "github_repo": "RemakePlace/app", // GitHub repository
-  "installation_path": "C:/Games/ReMakeplace", // Path to ReMakeplace installation
-  "exe_path": "Makeplace.exe", // Main executable filename
-  "preserve_folders": [
-    // Folders to preserve during updates
-    "Makeplace/Custom",
-    "Makeplace/Save"
-  ],
+  "current_version": "0.0.0",
+  "github_repo": "RemakePlace/app",
+  "installation_path": "",
+  "exe_path": "Makeplace.exe",
+  "preserve_folders": ["Makeplace/Custom", "Makeplace/Save"],
   "update_check_url": "https://api.github.com/repos/RemakePlace/app/releases/latest",
-  "last_check": "", // Last update check timestamp
-  "auto_check": true // Auto-check on startup
+  "last_check": "2024-01-01T00:00:00Z",
+  "auto_check": true
 }
 ```
+
+### Data Protection 🔒
+
+Your important data is automatically preserved during updates:
+
+- **`/Makeplace/Custom/`** - Your custom layouts and configurations
+- **`/Makeplace/Save/`** - Your saved data
 
 ## Development 👨‍💻
 
 ### Project Structure
 
 ```
-RemakePlaceUpdater/
-├── updater.py          # Main application
-├── config.json        # Configuration
-├── requirements.txt    # Python dependencies
-├── setup.py           # Build script
-├── launch_updater.bat # Windows launcher
-└── README.md          # This file
+ReMakeplaceUpdater/
+├── src/                    # Frontend (TypeScript)
+│   ├── main.ts            # Main application logic
+│   ├── style.css          # Styling
+│   └── types.ts           # Type definitions
+├── src-tauri/             # Backend (Rust)
+│   ├── src/
+│   │   ├── config.rs      # Configuration management
+│   │   ├── updater.rs     # Update checking logic
+│   │   ├── downloader.rs  # Download management
+│   │   ├── extractor.rs   # Archive extraction
+│   │   ├── launcher.rs    # Game launching
+│   │   └── lib.rs         # Main Tauri app
+│   └── tauri.conf.json    # Tauri configuration
+├── dist/                  # Built frontend
+├── package.json           # Node.js dependencies
+└── README.md             # This file
 ```
 
-### Key Components
+### Key Technologies
 
-- **UI Framework**: CustomTkinter for modern appearance
-- **Path Management**: Path validation and folder browsing
-- **HTTP Client**: Requests for GitHub API and downloads
-- **Archive Handling**: py7zr for .7z file extraction
-- **Version Management**: Packaging for version comparison
+- **Frontend**: TypeScript, HTML5, CSS3
+- **Backend**: Rust with Tauri framework
+- **HTTP Client**: reqwest for GitHub API and downloads
+- **Archive Handling**: sevenz-rust for 7z, zip for ZIP files
+- **Version Management**: semver for version comparison
+- **UI Framework**: Native OS webview with custom styling
+
+### Available Scripts
+
+```bash
+# Development
+npm run tauri dev          # Start development server
+npm run dev               # Frontend only development
+npm run build             # Build frontend
+npm run tauri build       # Build complete application
+
+# Maintenance
+cargo clean               # Clean Rust build cache (in src-tauri/)
+npm ci                    # Clean install dependencies
+```
+
+## GitHub Actions CI/CD 🔄
+
+The repository includes automated build and release workflows:
+
+- **Multi-platform builds**: Windows, macOS (Intel + Apple Silicon), Linux
+- **Automatic releases**: Triggered by version tags (`v*`)
+- **Draft releases**: For non-tag pushes
+- **Asset uploading**: All platform binaries included
+
+To create a release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ## License 📄
 

@@ -6,58 +6,95 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: write
   actions: read
 
 jobs:
-  build:
-    runs-on: windows-latest
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest" # for Arm based macs (M1 and above).
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-latest" # for Intel based macs.
+            args: "--target x86_64-apple-darwin"
+          - platform: "ubuntu-22.04"
+            args: ""
+          - platform: "windows-latest"
+            args: ""
 
+    runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Build standalone executable
-        run: |
-          python build.py
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          name: ReMakeplaceUpdater-${{ github.sha }}
-          path: release/
+          node-version: lts/*
+          cache: "npm"
+          cache-dependency-path: "ReMakeplaceUpdater/package-lock.json"
 
-      - name: Create release and upload assets
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
-          name: ReMakeplace Updater ${{ github.ref_name }}
-          body: |
-            ## ReMakeplace Auto-Updater ${{ github.ref_name }}
+          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-            **Package Contents:**
-            - `ReMakeplaceUpdater.exe` - **Main executable (download this!)**
-            - `config.json` - Configuration template
-            - `README.md` - Full documentation
-            - `launch_updater.bat` - Alternative launcher
-          draft: false
-          prerelease: false
-          files: |
-            release/ReMakeplaceUpdater.exe
-            release/config.json
-            release/README.md
-            release/launch_updater.bat
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./ReMakeplaceUpdater/src-tauri -> target"
+
+      - name: Install frontend dependencies
+        working-directory: ./ReMakeplaceUpdater
+        run: npm ci
+
+      - name: Build Tauri app and create release
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: "./ReMakeplaceUpdater"
+          tagName: remakeplace-updater-v__VERSION__
+          releaseName: "ReMakeplace Updater v__VERSION__"
+          releaseBody: |
+            ## ReMakeplace Auto-Updater v__VERSION__
+
+            A modern, native auto-updater for ReMakeplace built with Tauri.
+
+            ### 🚀 Features
+            - **Native Performance**: Built with Rust + TypeScript for optimal performance
+            - **Smart Caching**: Downloads are cached to minimize re-downloads
+            - **Data Preservation**: Automatically preserves Custom and Save folders
+            - **Multiple Formats**: Supports 7z and ZIP archives with fallback
+            - **Modern UI**: Clean, responsive interface with dark theme
+
+            ### 📦 Installation
+            1. Download the appropriate file for your operating system:
+               - **Windows**: `.msi` or `.exe` installer
+               - **macOS**: `.dmg` or `.app.tar.gz` 
+               - **Linux**: `.deb`, `.rpm`, or `.AppImage`
+            2. Run the installer or extract the portable version
+            3. Launch and configure your ReMakeplace installation path
+
+            ### 🔄 Migration from Python Version
+            The new Tauri version is fully compatible with existing `config.json` files from the Python version.
+
+            **Download the appropriate file below ⬇️**
+          releaseDraft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          prerelease: false
+          args: ${{ matrix.args }}
+          includeUpdaterJson: false

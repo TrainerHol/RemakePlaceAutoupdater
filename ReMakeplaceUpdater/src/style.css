@@ -1,0 +1,442 @@
+/* CSS Reset and Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Main Container */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  overflow: hidden;
+}
+
+/* Header Section */
+.header {
+  background: linear-gradient(135deg, #ff8c42 0%, #e6732a 100%);
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.header h1 {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Sections */
+.section {
+  padding: 20px;
+  border-bottom: 1px solid #333333;
+  flex-shrink: 0;
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+/* Make the main content area scrollable if needed */
+
+.content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Installation Path Display */
+.path-display {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background-color: #2d2d2d;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #404040;
+}
+
+.path-label {
+  font-weight: 600;
+  color: #cccccc;
+  min-width: 130px;
+}
+
+.path-text {
+  flex: 1;
+  color: #ffffff;
+  font-family: "Courier New", monospace;
+  font-size: 14px;
+  background-color: #1a1a1a;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #404040;
+  word-break: break-all;
+}
+
+.settings-btn {
+  background: linear-gradient(135deg, #ff8c42 0%, #e6732a 100%);
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.settings-btn:hover {
+  background: linear-gradient(135deg, #e6732a 0%, #cc5a1a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Version Information */
+.version-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+
+.version-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.version-label {
+  font-weight: 600;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.version-text {
+  color: #ff8c42;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+/* Status Message */
+.status-message {
+  padding: 12px;
+  border-radius: 6px;
+  background-color: #2d2d2d;
+  border: 1px solid #404040;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.status-message.checking_updates {
+  background-color: #1a4d66;
+  border-color: #2980b9;
+  color: #3498db;
+}
+
+.status-message.update_available {
+  background-color: #4d3319;
+  border-color: #e6732a;
+  color: #ff8c42;
+}
+
+.status-message.downloading,
+.status-message.installing {
+  background-color: #1a4d66;
+  border-color: #2980b9;
+  color: #3498db;
+}
+
+.status-message.up_to_date {
+  background-color: #1a4d1a;
+  border-color: #27ae60;
+  color: #2ecc71;
+}
+
+.status-message.error {
+  background-color: #4d1a1a;
+  border-color: #e74c3c;
+  color: #ff6b6b;
+}
+
+/* Progress Section */
+.progress-section {
+  background-color: #2d2d2d;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  margin: 0 20px;
+}
+
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background-color: #1a1a1a;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #404040;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff8c42 0%, #e6732a 100%);
+  width: 0%;
+  transition: width 0.3s ease;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(255, 140, 66, 0.3);
+}
+
+.progress-text {
+  text-align: center;
+  color: #cccccc;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Button Section */
+.button-section {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-top: auto;
+  padding-bottom: 30px;
+}
+
+/* Buttons */
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  min-width: 160px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #ff8c42 0%, #e6732a 100%);
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #e6732a 0%, #cc5a1a 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 140, 66, 0.4);
+}
+
+.btn-primary.btn-update {
+  background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+  }
+  50% {
+    box-shadow: 0 4px 16px rgba(255, 107, 53, 0.6);
+  }
+  100% {
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+  }
+}
+
+.btn-secondary {
+  background-color: #404040;
+  color: #ffffff;
+  border: 1px solid #666666;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #4a4a4a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 14px;
+  min-width: auto;
+}
+
+/* Modal Styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border: 1px solid #404040;
+  min-width: 500px;
+  max-width: 600px;
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #404040;
+  background: linear-gradient(135deg, #ff8c42 0%, #e6732a 100%);
+  border-radius: 12px 12px 0 0;
+}
+
+.modal-header h2 {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.modal-body {
+  padding: 25px;
+}
+
+.welcome-message {
+  color: #cccccc;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: #cccccc;
+}
+
+.path-input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.path-input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #404040;
+  border-radius: 6px;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  font-family: "Courier New", monospace;
+  font-size: 14px;
+}
+
+.path-input:focus {
+  outline: none;
+  border-color: #ff8c42;
+  box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+}
+
+.validation-message {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 5px;
+}
+
+.validation-message.valid {
+  color: #2ecc71;
+}
+
+.validation-message.invalid {
+  color: #ff6b6b;
+}
+
+.modal-footer {
+  padding: 20px;
+  border-top: 1px solid #404040;
+  display: flex;
+  gap: 15px;
+  justify-content: flex-end;
+  background-color: #2d2d2d;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Responsive Design */
+@media (max-width: 700px) {
+  .version-info {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .button-section {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .path-display {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .path-label {
+    min-width: auto;
+  }
+
+  .modal-content {
+    min-width: 90%;
+    margin: 20px;
+  }
+
+  .path-input-group {
+    flex-direction: column;
+  }
+}
+
+/* Scrollbar Styling */
+*::-webkit-scrollbar {
+  width: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background-color: #1a1a1a;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #404040;
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #ff8c42;
+}

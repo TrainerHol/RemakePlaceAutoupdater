@@ -10,6 +10,19 @@ release/
 *.egg-info/
 *.spec
 
+# Tauri build artifacts
+ReMakeplaceUpdater/target/
+ReMakeplaceUpdater/dist/
+ReMakeplaceUpdater/node_modules/
+ReMakeplaceUpdater/src-tauri/target/
+ReMakeplaceUpdater/src-tauri/gen/
+
+# Node.js
+node_modules/
+package-lock.json
+*.log
+.npm
+
 # Executables
 *.exe
 *.app
@@ -49,6 +62,7 @@ Thumbs.db
 
 # Configuration (keep template, ignore user configs)
 config_local.json
+config.json
 
 # Test files
 test_downloads/
