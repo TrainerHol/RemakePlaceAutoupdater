@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tauri::{Emitter};
+use anyhow::Context;
 
 mod config;
 mod updater;
@@ -208,6 +209,7 @@ async fn backup_user_data(installation_path: &Path, preserve_folders: &[String])
     if config_source.exists() {
         let config_dest = backup_dir.join("config.json");
         std::fs::copy(&config_source, &config_dest)?;
+        println!("Backed up MakePlace config.json from: {}", config_source.display());
     }
 
     Ok(())
@@ -232,13 +234,57 @@ async fn restore_user_data(installation_path: &Path, preserve_folders: &[String]
         }
     }
 
-    // Restore config.json if it was backed up
+    // Smart restore config.json with merging
     let config_source = backup_dir.join("config.json");
     let config_dest = installation_path.join("config.json");
+    
     if config_source.exists() {
-        std::fs::copy(&config_source, &config_dest)?;
+        if let Err(e) = merge_config_files(&config_source, &config_dest).await {
+            println!("Config merge failed, falling back to simple restore: {}", e);
+            // Fallback to simple copy if merge fails
+            std::fs::copy(&config_source, &config_dest)?;
+        }
+        println!("Restored MakePlace config.json to: {}", config_dest.display());
     }
 
+    Ok(())
+}
+
+/// Smart config.json merging that preserves user settings while adding new options
+async fn merge_config_files(backup_config: &Path, new_config: &Path) -> Result<(), anyhow::Error> {
+    // Read the backed up (user) config
+    let user_config_content = std::fs::read_to_string(backup_config)
+        .context("Failed to read user config.json")?;
+    let mut user_config: serde_json::Value = serde_json::from_str(&user_config_content)
+        .context("Failed to parse user config.json")?;
+
+    // Read the new (from update) config if it exists
+    if new_config.exists() {
+        let new_config_content = std::fs::read_to_string(new_config)
+            .context("Failed to read new config.json")?;
+        let new_config_json: serde_json::Value = serde_json::from_str(&new_config_content)
+            .context("Failed to parse new config.json")?;
+
+        // Merge: Add new keys from the update, preserve existing user values
+        if let (Some(user_obj), Some(new_obj)) = (user_config.as_object_mut(), new_config_json.as_object()) {
+            for (key, new_value) in new_obj {
+                if !user_obj.contains_key(key) {
+                    // Add new option that didn't exist in user config
+                    user_obj.insert(key.clone(), new_value.clone());
+                    println!("Added new config option: {} = {}", key, new_value);
+                }
+                // Keep existing user values for all other keys
+            }
+        }
+    }
+
+    // Write the merged config back
+    let merged_content = serde_json::to_string_pretty(&user_config)
+        .context("Failed to serialize merged config")?;
+    std::fs::write(new_config, merged_content)
+        .context("Failed to write merged config.json")?;
+
+    println!("Successfully merged config.json - preserved user settings and added new options");
     Ok(())
 }
 

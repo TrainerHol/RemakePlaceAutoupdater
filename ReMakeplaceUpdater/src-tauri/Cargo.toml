@@ -1,8 +1,8 @@
 [package]
 name = "remakeplaceupdater"
-version = "1.0.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "1.0.1"
+description = "Auto updater for ReMakeplace"
+authors = ["Hol"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -29,8 +29,15 @@ tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 tokio = { version = "1.0", features = ["full"] }
 reqwest = { version = "0.11", features = ["json", "stream"] }
-sevenz-rust = "0.4"
-zip = "0.6"
+# Multiple compression libraries for better fallback support
+sevenz-rust = "0.6"  # Updated to latest version
+zip = "2.0"          # Updated to latest version  
+tar = "0.4"          # For tar archives
+flate2 = "1.0"       # For gzip/deflate
+xz2 = "0.1"          # For xz/lzma compression
+bzip2 = "0.4"        # For bzip2 compression
+zstd = "0.13"        # For zstd compression
+# Other dependencies
 semver = "1.0"
 dirs = "5.0"
 anyhow = "1.0"
