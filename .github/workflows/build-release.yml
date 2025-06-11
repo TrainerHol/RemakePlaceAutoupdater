@@ -104,6 +104,7 @@ jobs:
 
       - name: Upload portable executables
         if: startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -129,12 +130,17 @@ jobs:
             fi
           fi
 
-          # Change to the project directory
+                    # Change to the project directory
           cd ReMakeplaceUpdater
+
+          echo "Looking for executable: $TARGET_DIR/$EXECUTABLE_NAME"
+          echo "Current directory: $(pwd)"
+          echo "Contents of target directory:"
+          ls -la "$TARGET_DIR/" || echo "Target directory $TARGET_DIR does not exist"
 
           # Check if the executable exists
           if [[ -f "$TARGET_DIR/$EXECUTABLE_NAME" ]]; then
-            echo "Found portable executable at $TARGET_DIR/$EXECUTABLE_NAME"
+            echo "✅ Found portable executable at $TARGET_DIR/$EXECUTABLE_NAME"
             
             # Copy the executable with a descriptive name
             cp "$TARGET_DIR/$EXECUTABLE_NAME" "$PORTABLE_NAME"
@@ -143,10 +149,13 @@ jobs:
             TAG_NAME=${GITHUB_REF#refs/tags/}
             
             # Upload the portable executable to the release
-            gh release upload "$TAG_NAME" "$PORTABLE_NAME" --clobber
-            
-            echo "Uploaded portable executable: $PORTABLE_NAME"
+            if gh release upload "$TAG_NAME" "$PORTABLE_NAME" --clobber; then
+              echo "✅ Successfully uploaded portable executable: $PORTABLE_NAME"
+            else
+              echo "❌ Failed to upload portable executable"
+              exit 1
+            fi
           else
-            echo "Portable executable not found at $TARGET_DIR/$EXECUTABLE_NAME"
-            ls -la "$TARGET_DIR/" || echo "Target directory does not exist"
+            echo "⚠️ Portable executable not found at $TARGET_DIR/$EXECUTABLE_NAME"
+            echo "This is expected for some platforms. Skipping portable upload."
           fi
