@@ -45,7 +45,7 @@ jobs:
         with:
           node-version: lts/*
           cache: "npm"
-          cache-dependency-path: "ReMakeplaceUpdater/package-lock.json"
+          cache-dependency-path: "./ReMakeplaceUpdater/package-lock.json"
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
