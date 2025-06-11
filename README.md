@@ -13,11 +13,22 @@ A modern, native auto-updater for ReMakeplace built with Tauri (Rust + TypeScrip
 
 1. **Download from [Releases](https://github.com/TrainerHol/RemakePlaceAutoupdater/releases)**
 
-   - **Windows**: Download `.msi` installer or `.exe` portable
-   - **macOS**: Download `.dmg` installer or `.app.tar.gz` portable
-   - **Linux**: Download `.deb`, `.rpm`, or `.AppImage`
+   **Installers (Recommended for most users):**
 
-2. **Run the installer** or extract portable version
+   - **Windows**: `.msi` (Windows Installer) or `.exe` (NSIS Setup)
+   - **macOS**: `.dmg` (Disk Image)
+   - **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (RedHat/Fedora), or `.AppImage` (Universal)
+
+   **Portable Executables (Advanced users):**
+
+   - **Windows**: `.exe` (Portable - no installation required)
+   - **macOS**: `.app.tar.gz` (Portable app bundle)
+   - **Linux**: Binary executable (Portable - no installation required)
+
+2. **Installation Options**
+
+   - **Installers**: Run the installer and follow the setup wizard
+   - **Portable**: Extract (if needed) and run directly - no installation required
 
 3. **Launch and configure**
    - On first run, click "Browse" to select your ReMakeplace installation folder

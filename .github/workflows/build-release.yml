@@ -79,15 +79,74 @@ jobs:
             - **Data Preservation**: Automatically preserves Custom and Save folders
             - **Modern UI**: Clean, responsive interface with dark theme
 
-            ### 📦 Installation
-            1. Download the appropriate file for your operating system:
-               - **Windows**: `.msi` or `.exe` installer
-               - **macOS**: `.dmg` or `.app.tar.gz` 
-               - **Linux**: `.deb`, `.rpm`, or `.AppImage`
-            2. Run the installer or extract the portable version
-            3. Launch and configure your ReMakeplace installation path
+            ### 📦 Installation Options
+
+            **Installers (Recommended for most users):**
+            - **Windows**: `.msi` (Windows Installer) or `.exe` (NSIS Setup)
+            - **macOS**: `.dmg` (Disk Image)
+            - **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (RedHat/Fedora), or `.AppImage` (Universal)
+
+            **Portable Executables (Advanced users):**
+            - **Windows**: `remakeplaceupdater.exe` (Portable - no installation required)
+            - **macOS**: `remakeplaceupdater` (Portable binary)
+            - **Linux**: `remakeplaceupdater` (Portable binary)
+
+            ### 🔧 Setup
+            1. Download the appropriate file for your operating system
+            2. **Installers**: Run the installer and follow the setup wizard
+            3. **Portable**: Extract (if needed) and run directly - no installation required
+            4. Launch and configure your ReMakeplace installation path
 
           releaseDraft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           prerelease: false
           args: ${{ matrix.args }}
           includeUpdaterJson: false
+
+      - name: Upload portable executables
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # Determine the target directory and executable name based on platform
+          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            EXECUTABLE_NAME="remakeplaceupdater.exe"
+            TARGET_DIR="target/release"
+            PORTABLE_NAME="remakeplaceupdater-portable-windows.exe"
+          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            EXECUTABLE_NAME="remakeplaceupdater"
+            TARGET_DIR="target/release"
+            PORTABLE_NAME="remakeplaceupdater-portable-linux"
+          elif [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
+            if [[ "${{ matrix.args }}" == *"aarch64"* ]]; then
+              EXECUTABLE_NAME="remakeplaceupdater"
+              TARGET_DIR="target/aarch64-apple-darwin/release"
+              PORTABLE_NAME="remakeplaceupdater-portable-macos-aarch64"
+            else
+              EXECUTABLE_NAME="remakeplaceupdater"
+              TARGET_DIR="target/x86_64-apple-darwin/release"
+              PORTABLE_NAME="remakeplaceupdater-portable-macos-x64"
+            fi
+          fi
+
+          # Change to the project directory
+          cd ReMakeplaceUpdater
+
+          # Check if the executable exists
+          if [[ -f "$TARGET_DIR/$EXECUTABLE_NAME" ]]; then
+            echo "Found portable executable at $TARGET_DIR/$EXECUTABLE_NAME"
+            
+            # Copy the executable with a descriptive name
+            cp "$TARGET_DIR/$EXECUTABLE_NAME" "$PORTABLE_NAME"
+            
+            # Get the tag name
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            
+            # Upload the portable executable to the release
+            gh release upload "$TAG_NAME" "$PORTABLE_NAME" --clobber
+            
+            echo "Uploaded portable executable: $PORTABLE_NAME"
+          else
+            echo "Portable executable not found at $TARGET_DIR/$EXECUTABLE_NAME"
+            ls -la "$TARGET_DIR/" || echo "Target directory does not exist"
+          fi
