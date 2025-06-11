@@ -155,3 +155,5 @@ git push origin v1.0.0
 This updater is provided as-is for the ReMakeplace community. Use at your own risk. Feel free to modify and distribute.
 
 ---
+
+> **Note**: Portable executables are available for advanced users who prefer not to install software. These run directly without requiring installation.

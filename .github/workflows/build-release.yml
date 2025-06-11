@@ -102,11 +102,15 @@ jobs:
           args: ${{ matrix.args }}
           includeUpdaterJson: false
 
-      - name: Upload portable executables
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Debug GitHub ref
+        shell: bash
+        run: |
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub event name: ${{ github.event_name }}"
+          echo "Is tag: ${{ startsWith(github.ref, 'refs/tags/') }}"
+
+      - name: Create portable executable
         continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           # Determine the target directory and executable name based on platform
@@ -130,7 +134,7 @@ jobs:
             fi
           fi
 
-                    # Change to the project directory
+          # Change to the project directory
           cd ReMakeplaceUpdater
 
           echo "Looking for executable: $TARGET_DIR/$EXECUTABLE_NAME"
@@ -145,17 +149,47 @@ jobs:
             # Copy the executable with a descriptive name
             cp "$TARGET_DIR/$EXECUTABLE_NAME" "$PORTABLE_NAME"
             
-            # Get the tag name
-            TAG_NAME=${GITHUB_REF#refs/tags/}
+            echo "✅ Portable executable created: $PORTABLE_NAME"
+            echo "📁 File size: $(ls -lh "$PORTABLE_NAME" | awk '{print $5}' 2>/dev/null || stat -c%s "$PORTABLE_NAME" 2>/dev/null || echo 'unknown')"
             
-            # Upload the portable executable to the release
-            if gh release upload "$TAG_NAME" "$PORTABLE_NAME" --clobber; then
-              echo "✅ Successfully uploaded portable executable: $PORTABLE_NAME"
-            else
-              echo "❌ Failed to upload portable executable"
-              exit 1
-            fi
+            # Set output for artifact upload
+            echo "PORTABLE_EXECUTABLE=$PORTABLE_NAME" >> $GITHUB_ENV
+            echo "HAS_PORTABLE=true" >> $GITHUB_ENV
           else
             echo "⚠️ Portable executable not found at $TARGET_DIR/$EXECUTABLE_NAME"
-            echo "This is expected for some platforms. Skipping portable upload."
+            echo "This is expected for some platforms. Skipping portable creation."
+            echo "HAS_PORTABLE=false" >> $GITHUB_ENV
+          fi
+
+      - name: Upload portable executable as artifact
+        if: env.HAS_PORTABLE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.platform }}-${{ matrix.args || 'default' }}
+          path: ReMakeplaceUpdater/${{ env.PORTABLE_EXECUTABLE }}
+          retention-days: 30
+
+      - name: Upload portable executable to release
+        if: startsWith(github.ref, 'refs/tags/') && env.HAS_PORTABLE == 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          cd ReMakeplaceUpdater
+
+          # Get the tag name
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+
+          echo "Attempting to upload portable executable to release: $TAG_NAME"
+
+          # Wait a bit for the release to be created by tauri-action
+          sleep 10
+
+          # Upload the portable executable to the release
+          if gh release upload "$TAG_NAME" "${{ env.PORTABLE_EXECUTABLE }}" --clobber; then
+            echo "✅ Successfully uploaded portable executable to release"
+          else
+            echo "❌ Failed to upload portable executable to release"
+            echo "The portable executable is still available as a workflow artifact"
           fi
