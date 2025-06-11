@@ -76,10 +76,7 @@ jobs:
             A modern, native auto-updater for ReMakeplace built with Tauri.
 
             ### 🚀 Features
-            - **Native Performance**: Built with Rust + TypeScript for optimal performance
-            - **Smart Caching**: Downloads are cached to minimize re-downloads
             - **Data Preservation**: Automatically preserves Custom and Save folders
-            - **Multiple Formats**: Supports 7z and ZIP archives with fallback
             - **Modern UI**: Clean, responsive interface with dark theme
 
             ### 📦 Installation
@@ -90,10 +87,6 @@ jobs:
             2. Run the installer or extract the portable version
             3. Launch and configure your ReMakeplace installation path
 
-            ### 🔄 Migration from Python Version
-            The new Tauri version is fully compatible with existing `config.json` files from the Python version.
-
-            **Download the appropriate file below ⬇️**
           releaseDraft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           prerelease: false
           args: ${{ matrix.args }}

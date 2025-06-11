@@ -1,206 +1,146 @@
-# ReMakeplace Auto-Updater (Tauri/Rust)
+# ReMakeplace Auto-Updater 🚀
 
-A modern, fast, and reliable auto-updater for ReMakeplace built with Tauri and Rust. This replaces the previous Python version with better performance, smaller size, and native system integration.
+A modern, native auto-updater for ReMakeplace built with Tauri (Rust + TypeScript). Download updates directly from GitHub releases with smart caching and data preservation.
 
-## Features
+## Features ✨
 
-### ✨ Core Features
+- **🔒 Data Preservation**: Automatically preserves Custom and Save folders
+- **⚙️ Easy Setup**: Browse and configure installation path with validation
 
-- **Automatic Updates**: Checks GitHub releases for new versions
-- **Smart Caching**: Downloads are cached and reused
-- **Data Preservation**: User data (Custom/Save folders) is backed up during updates
-- **Multiple Archive Formats**: Supports .7z and .zip with multiple fallback extraction methods
-- **Game Launcher**: Launch ReMakeplace directly from the updater
-- **Modern UI**: Dark theme with orange accents matching ReMakeplace branding
+## Installation 📦
 
-### 🔧 Technical Features
+### Option 1: Download Pre-built Binary (Recommended)
 
-- **Single Executable**: No external dependencies required
-- **Cross-platform**: Built with Rust for Windows, macOS, and Linux
-- **Memory Efficient**: Streams large downloads without loading everything into memory
-- **Robust Error Handling**: Graceful fallbacks and user-friendly error messages
-- **Background Operations**: Non-blocking UI with real-time progress updates
+1. **Download from [Releases](https://github.com/TrainerHol/RemakePlaceAutoupdater/releases)**
 
-## Installation
+   - **Windows**: Download `.msi` installer or `.exe` portable
+   - **macOS**: Download `.dmg` installer or `.app.tar.gz` portable
+   - **Linux**: Download `.deb`, `.rpm`, or `.AppImage`
 
-### From Release
+2. **Run the installer** or extract portable version
 
-1. Download the latest release from the GitHub releases page
-2. Extract and run `ReMakeplace Launcher.exe`
-3. On first run, select your ReMakeplace installation folder
+3. **Launch and configure**
+   - On first run, click "Browse" to select your ReMakeplace installation folder
+   - The app validates that `Makeplace.exe` exists in the selected folder
+   - Click "Save & Continue" to proceed
 
-### Building from Source
+### Option 2: Build from Source
+
+#### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) 1.70+
+- Platform-specific dependencies:
+  - **Linux**: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
+  - **Windows**: No additional dependencies needed
+  - **macOS**: No additional dependencies needed
+
+#### Build Steps
 
 ```bash
-# Prerequisites: Node.js, npm, Rust
-git clone <repository-url>
-cd ReMakeplaceUpdater
+# Clone the repository
+git clone https://github.com/TrainerHol/RemakePlaceAutoupdater.git
+cd RemakePlaceAutoupdater/ReMakeplaceUpdater
+
+# Install dependencies
 npm install
-npm run tauri-build
+
+# Development mode
+npm run tauri dev
+
+# Build release
+npm run tauri build
 ```
 
-## Usage
+## Configuration ⚙️
 
-### First Run Setup
-
-1. Launch the updater
-2. Click "⚙️ Settings" to configure your installation path
-3. Browse to your ReMakeplace installation folder (must contain `Makeplace.exe`)
-4. Click "Save & Continue"
-
-### Normal Operation
-
-- **Check for Updates**: Click "Check for Updates" or it happens automatically on startup
-- **Install Updates**: When available, click "Update Now" to download and install
-- **Launch Game**: Click "Launch ReMakeplace" to start the game
-- **Change Settings**: Click "⚙️ Settings" to modify the installation path
-
-## Configuration
-
-The updater uses a `config.json` file with the following structure:
+The `config.json` file is automatically created with sensible defaults and you can change the repo to any other fork of Makeplace in the future:
 
 ```json
 {
-  "current_version": "7.25.0",
+  "current_version": "0.0.0",
   "github_repo": "RemakePlace/app",
-  "installation_path": "path/to/installation",
+  "installation_path": "",
   "exe_path": "Makeplace.exe",
   "preserve_folders": ["Makeplace/Custom", "Makeplace/Save"],
   "update_check_url": "https://api.github.com/repos/RemakePlace/app/releases/latest",
-  "last_check": "2025-06-03T23:01:28.574023",
+  "last_check": "2024-01-01T00:00:00Z",
   "auto_check": true
 }
 ```
 
-### Configuration Options
+### Data Protection 🔒
 
-- `current_version`: Currently installed version
-- `installation_path`: Path to ReMakeplace installation
-- `preserve_folders`: Folders to backup during updates
-- `auto_check`: Enable automatic update checking on startup
+Your important data is automatically preserved during updates:
 
-## Architecture
+- **`/Makeplace/Custom/`** - Your custom layouts and configurations
+- **`/Makeplace/Save/`** - Your saved data
 
-### Backend (Rust)
-
-- **Config Management**: Handles configuration loading/saving and validation
-- **Update Manager**: GitHub API integration and version comparison
-- **Download Manager**: Streaming downloads with progress tracking
-- **Archive Extractor**: Multi-format extraction with fallbacks
-- **Game Launcher**: Process management for launching ReMakeplace
-
-### Frontend (TypeScript/HTML/CSS)
-
-- **Modern UI**: Clean, responsive interface with dark theme
-- **Real-time Updates**: Progress bars and status messages
-- **Settings Dialog**: Path configuration with validation
-- **Event-Driven**: Reactive UI responding to backend events
-
-### Communication
-
-- **Tauri Commands**: Frontend → Backend function calls
-- **Tauri Events**: Backend → Frontend real-time updates
-- **Type Safety**: Full TypeScript definitions for all interfaces
-
-## Update Process
-
-1. **Check**: Query GitHub API for latest release
-2. **Compare**: Use semantic versioning to determine if update needed
-3. **Download**: Stream download to cache directory with progress tracking
-4. **Backup**: Preserve user data (Custom/Save folders)
-5. **Extract**: Extract archive using native libraries or system tools
-6. **Restore**: Restore user data to new installation
-7. **Update**: Update configuration with new version
-8. **Cleanup**: Remove old cache files and temporary directories
-
-## Error Handling
-
-The updater includes comprehensive error handling:
-
-- **Network Issues**: Retry logic and offline graceful degradation
-- **File System**: Permission errors and disk space handling
-- **Archive Problems**: Multiple extraction method fallbacks
-- **Data Safety**: Backup restoration on failed updates
-
-## Development
+## Development 👨‍💻
 
 ### Project Structure
 
 ```
 ReMakeplaceUpdater/
-├── src/                    # Frontend TypeScript
+├── src/                    # Frontend (TypeScript)
 │   ├── main.ts            # Main application logic
-│   ├── types.ts           # TypeScript definitions
-│   └── style.css          # UI styling
-├── src-tauri/             # Rust backend
-│   └── src/
-│       ├── lib.rs         # Main Tauri application
-│       ├── config.rs      # Configuration management
-│       ├── updater.rs     # Update logic
-│       ├── downloader.rs  # Download management
-│       ├── extractor.rs   # Archive extraction
-│       └── launcher.rs    # Game launcher
-├── index.html             # Frontend entry point
-└── config.json           # User configuration
+│   ├── style.css          # Styling
+│   └── types.ts           # Type definitions
+├── src-tauri/             # Backend (Rust)
+│   ├── src/
+│   │   ├── config.rs      # Configuration management
+│   │   ├── updater.rs     # Update checking logic
+│   │   ├── downloader.rs  # Download management
+│   │   ├── extractor.rs   # Archive extraction
+│   │   ├── launcher.rs    # Game launching
+│   │   └── lib.rs         # Main Tauri app
+│   └── tauri.conf.json    # Tauri configuration
+├── dist/                  # Built frontend
+├── package.json           # Node.js dependencies
+└── README.md             # This file
 ```
+
+### Key Technologies
+
+- **Frontend**: TypeScript, HTML5, CSS3
+- **Backend**: Rust with Tauri framework
+- **HTTP Client**: reqwest for GitHub API and downloads
+- **Archive Handling**: sevenz-rust for 7z, zip for ZIP files
+- **Version Management**: semver for version comparison
+- **UI Framework**: Native OS webview with custom styling
 
 ### Available Scripts
 
-- `npm run dev`: Start frontend development server
-- `npm run build`: Build frontend for production
-- `npm run tauri-dev`: Start Tauri development mode
-- `npm run tauri-build`: Build production executable
+```bash
+# Development
+npm run tauri dev          # Start development server
+npm run dev               # Frontend only development
+npm run build             # Build frontend
+npm run tauri build       # Build complete application
 
-### Dependencies
+# Maintenance
+cargo clean               # Clean Rust build cache (in src-tauri/)
+npm ci                    # Clean install dependencies
+```
 
-- **Frontend**: Vite, TypeScript, Tauri API
-- **Backend**: Tauri, Tokio, Reqwest, 7z/ZIP libraries
+## GitHub Actions CI/CD 🔄
 
-## Migration from Python Version
+The repository includes automated build and release workflows:
 
-The Tauri version is designed to be a drop-in replacement:
+- **Multi-platform builds**: Windows, macOS (Intel + Apple Silicon), Linux
+- **Automatic releases**: Triggered by version tags (`v*`)
+- **Draft releases**: For non-tag pushes
+- **Asset uploading**: All platform binaries included
 
-- ✅ Same UI layout and functionality
-- ✅ Compatible with existing `config.json` files
-- ✅ Identical user experience
-- ✅ Better performance and smaller size
+To create a release:
 
-Simply replace the Python executable with the new Tauri version.
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-## Troubleshooting
+## License 📄
 
-### Common Issues
+This updater is provided as-is for the ReMakeplace community. Use at your own risk. Feel free to modify and distribute.
 
-- **"Makeplace.exe not found"**: Ensure the installation path points to the correct folder
-- **Download fails**: Check internet connection and GitHub API availability
-- **Extraction fails**: Ensure sufficient disk space and proper permissions
-- **Game won't launch**: Verify the executable path is correct
-
-### Logs and Debugging
-
-The application outputs debug information to the console in development mode. For production issues, check:
-
-- Network connectivity to GitHub
-- File system permissions
-- Available disk space
-- Antivirus software blocking operations
-
-## License
-
-This project is licensed under the same terms as ReMakeplace.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## Support
-
-For issues related to:
-
-- **The updater itself**: Open an issue on this repository
-- **ReMakeplace game**: Contact the ReMakeplace developers
-- **Installation problems**: Check the troubleshooting section above
+---
