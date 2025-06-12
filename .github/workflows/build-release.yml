@@ -170,7 +170,7 @@ jobs:
           retention-days: 30
 
       - name: Upload portable executable to release
-        if: startsWith(github.ref, 'refs/tags/') && env.HAS_PORTABLE == 'true'
+        if: env.HAS_PORTABLE == 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -178,18 +178,29 @@ jobs:
         run: |
           cd ReMakeplaceUpdater
 
-          # Get the tag name
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Waiting for tauri-action to create the release..."
+          sleep 30
 
-          echo "Attempting to upload portable executable to release: $TAG_NAME"
+          # List all releases to see what's available
+          echo "Available releases:"
+          gh release list --limit 10
 
-          # Wait a bit for the release to be created by tauri-action
-          sleep 10
+          # Find the most recent release (likely the one just created by tauri-action)
+          LATEST_RELEASE=$(gh release list --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[0].tagName')
 
-          # Upload the portable executable to the release
-          if gh release upload "$TAG_NAME" "${{ env.PORTABLE_EXECUTABLE }}" --clobber; then
-            echo "✅ Successfully uploaded portable executable to release"
+          if [[ -n "$LATEST_RELEASE" ]]; then
+            echo "Found latest release: $LATEST_RELEASE"
+            
+            # Upload the portable executable to the release
+            echo "Uploading portable executable to release: $LATEST_RELEASE"
+            if gh release upload "$LATEST_RELEASE" "${{ env.PORTABLE_EXECUTABLE }}" --clobber; then
+              echo "✅ Successfully uploaded portable executable to release: $LATEST_RELEASE"
+            else
+              echo "❌ Failed to upload portable executable to release"
+              echo "Trying to check release status..."
+              gh release view "$LATEST_RELEASE" || echo "Release view failed"
+            fi
           else
-            echo "❌ Failed to upload portable executable to release"
-            echo "The portable executable is still available as a workflow artifact"
+            echo "❌ No releases found"
+            echo "The portable executable is available as a workflow artifact"
           fi
