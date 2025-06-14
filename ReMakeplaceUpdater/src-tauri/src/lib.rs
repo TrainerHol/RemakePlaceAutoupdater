@@ -22,6 +22,7 @@ pub struct AppState {
     pub current_config: Arc<Mutex<Option<Config>>>,
     pub download_progress: Arc<Mutex<ProgressInfo>>,
     pub is_updating: Arc<Mutex<bool>>,
+    pub is_downloading: Arc<Mutex<bool>>,
 }
 
 impl AppState {
@@ -30,6 +31,7 @@ impl AppState {
             current_config: Arc::new(Mutex::new(None)),
             download_progress: Arc::new(Mutex::new(ProgressInfo::default())),
             is_updating: Arc::new(Mutex::new(false)),
+            is_downloading: Arc::new(Mutex::new(false)),
         }
     }
 }
@@ -64,28 +66,76 @@ async fn start_download(
     version: String,
     original_filename: String,
     app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
+    // Check if a download is already in progress
+    {
+        let mut downloading = state.is_downloading.lock().await;
+        if *downloading {
+            return Err("Download already in progress".to_string());
+        }
+        *downloading = true;
+    }
+
     let cache_dir = Downloader::get_cache_directory();
     let filepath = Downloader::get_cache_filepath(&cache_dir, &version, &original_filename);
 
-    // Check if file already exists in cache
+    // Check if file already exists in cache and validate it
+    let mut resume_download = false;
     if filepath.exists() {
-        return Ok(filepath.to_string_lossy().to_string());
+        match Downloader::validate_cached_file(&filepath, None) {
+            Ok(true) => {
+                println!("Found valid cached file: {}", filepath.display());
+                // Reset download state since we're using cached file
+                *state.is_downloading.lock().await = false;
+                return Ok(filepath.to_string_lossy().to_string());
+            }
+            Ok(false) => {
+                println!("Found invalid cached file, will attempt to resume: {}", filepath.display());
+                resume_download = true;
+            }
+            Err(e) => {
+                println!("Error validating cached file: {}, removing and redownloading", e);
+                if let Err(remove_err) = std::fs::remove_file(&filepath) {
+                    println!("Warning: Failed to remove invalid cache file: {}", remove_err);
+                    // Continue with download anyway
+                }
+            }
+        }
     }
 
     let app_handle_progress = app_handle.clone();
     let app_handle_complete = app_handle.clone();
     let app_handle_error = app_handle;
     let filepath_clone = filepath.clone();
+    let state_clone = state.inner().clone();
 
     tokio::spawn(async move {
         let progress_callback = move |progress: ProgressInfo| {
             let _ = app_handle_progress.emit("download-progress", &progress);
         };
 
-        match Downloader::download_file(&url, &filepath_clone, progress_callback).await {
+        let download_result = Downloader::download_file_with_resume(&url, &filepath_clone, resume_download, progress_callback).await;
+        
+        // Always reset download state when done
+        *state_clone.is_downloading.lock().await = false;
+
+        match download_result {
             Ok(()) => {
-                let _ = app_handle_complete.emit("download-complete", &filepath_clone.to_string_lossy().to_string());
+                // Validate the completed download
+                match Downloader::validate_cached_file(&filepath_clone, None) {
+                    Ok(true) => {
+                        let _ = app_handle_complete.emit("download-complete", &filepath_clone.to_string_lossy().to_string());
+                    }
+                    Ok(false) => {
+                        // Remove invalid file
+                        let _ = std::fs::remove_file(&filepath_clone);
+                        let _ = app_handle_error.emit("download-error", "Downloaded file failed validation");
+                    }
+                    Err(e) => {
+                        let _ = app_handle_error.emit("download-error", &format!("Error validating downloaded file: {}", e));
+                    }
+                }
             }
             Err(e) => {
                 let _ = app_handle_error.emit("download-error", &e.to_string());
@@ -185,6 +235,28 @@ async fn browse_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
     } else {
         Ok(None)
     }
+}
+
+#[tauri::command]
+async fn clear_cache() -> Result<(), String> {
+    let cache_dir = Downloader::get_cache_directory();
+    
+    if cache_dir.exists() {
+        Downloader::manage_cache(&cache_dir, false)
+            .map_err(|e| format!("Failed to clear cache: {}", e))?;
+        
+        println!("Cache cleared successfully");
+        Ok(())
+    } else {
+        Ok(()) // No cache to clear
+    }
+}
+
+#[tauri::command]
+async fn get_cache_path(version: String, original_filename: String) -> Result<String, String> {
+    let cache_dir = Downloader::get_cache_directory();
+    let filepath = Downloader::get_cache_filepath(&cache_dir, &version, &original_filename);
+    Ok(filepath.to_string_lossy().to_string())
 }
 
 // Helper functions for data preservation
@@ -333,7 +405,9 @@ pub fn run() {
             start_download,
             install_update,
             launch_game,
-            browse_folder
+            browse_folder,
+            clear_cache,
+            get_cache_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

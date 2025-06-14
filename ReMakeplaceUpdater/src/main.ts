@@ -22,6 +22,7 @@ class ReMakeplaceUpdater {
   private updateButton!: HTMLButtonElement;
   private launchButton!: HTMLButtonElement;
   private settingsButton!: HTMLButtonElement;
+  private clearCacheButton!: HTMLButtonElement;
   private progressSection!: HTMLElement;
 
   constructor() {
@@ -78,6 +79,7 @@ class ReMakeplaceUpdater {
           <div class="section button-section">
             <button id="update-btn" class="btn btn-primary" disabled>Check for Updates</button>
             <button id="launch-btn" class="btn btn-secondary">Launch ReMakeplace</button>
+            <button id="clear-cache-btn" class="btn btn-small">Clear Cache</button>
           </div>
         </div>
 
@@ -116,6 +118,7 @@ class ReMakeplaceUpdater {
     this.updateButton = document.getElementById("update-btn") as HTMLButtonElement;
     this.launchButton = document.getElementById("launch-btn") as HTMLButtonElement;
     this.settingsButton = document.getElementById("settings-btn") as HTMLButtonElement;
+    this.clearCacheButton = document.getElementById("clear-cache-btn") as HTMLButtonElement;
     this.progressSection = document.getElementById("progress-section")!;
   }
 
@@ -130,7 +133,20 @@ class ReMakeplaceUpdater {
     });
 
     listen<string>("download-error", (event) => {
-      this.setStatus(AppState.ERROR, `Download failed: ${event.payload}`);
+      const errorMsg = event.payload;
+      let userFriendlyMsg = "Download failed";
+      
+      if (errorMsg.includes("network") || errorMsg.includes("connection")) {
+        userFriendlyMsg = "Download failed due to network issues. Check your internet connection and try again.";
+      } else if (errorMsg.includes("timeout")) {
+        userFriendlyMsg = "Download timed out. Try clearing cache and retrying.";
+      } else if (errorMsg.includes("validation")) {
+        userFriendlyMsg = "Downloaded file is corrupted. Try clearing cache and downloading again.";
+      } else if (errorMsg.includes("space") || errorMsg.includes("disk")) {
+        userFriendlyMsg = "Not enough disk space. Free up some space and try again.";
+      }
+      
+      this.setStatus(AppState.ERROR, `${userFriendlyMsg} (${errorMsg})`);
     });
 
     listen<string>("status-update", (event) => {
@@ -138,7 +154,22 @@ class ReMakeplaceUpdater {
     });
 
     listen<string>("error", (event) => {
-      this.setStatus(AppState.ERROR, event.payload);
+      const errorMsg = event.payload;
+      let userFriendlyMsg = "An error occurred";
+      
+      if (errorMsg.includes("Extraction failed")) {
+        if (errorMsg.includes("zst")) {
+          userFriendlyMsg = "Archive extraction failed. The downloaded file may be corrupted or in an unsupported format. Try clearing cache and downloading again.";
+        } else {
+          userFriendlyMsg = "Failed to extract the update archive. The file may be corrupted.";
+        }
+      } else if (errorMsg.includes("Backup failed")) {
+        userFriendlyMsg = "Failed to backup your data before updating. Check that you have sufficient disk space.";
+      } else if (errorMsg.includes("Failed to restore")) {
+        userFriendlyMsg = "Update completed but failed to restore some user data. Check your installation directory.";
+      }
+      
+      this.setStatus(AppState.ERROR, `${userFriendlyMsg} (${errorMsg})`);
     });
 
     listen("update-complete", () => {
@@ -160,6 +191,10 @@ class ReMakeplaceUpdater {
 
     this.settingsButton.addEventListener("click", () => {
       this.showSettings();
+    });
+
+    this.clearCacheButton.addEventListener("click", () => {
+      this.clearCache();
     });
 
     // Settings modal listeners
@@ -301,7 +336,12 @@ class ReMakeplaceUpdater {
 
     try {
       const filename = this.updateInfo.download_url.split("/").pop() || "update.7z";
-      const cachePath = `update_cache/v${this.updateInfo.latest_version}_${filename}`;
+      
+      // Get the cache path from the backend to ensure consistency
+      const cachePath = await invoke<string>("get_cache_path", {
+        version: this.updateInfo.latest_version,
+        originalFilename: filename,
+      });
 
       await invoke("install_update", {
         archivePath: cachePath,
@@ -422,6 +462,21 @@ class ReMakeplaceUpdater {
       }
     } catch (error) {
       this.setStatus(AppState.ERROR, `Failed to save configuration: ${error}`);
+    }
+  }
+
+  private async clearCache() {
+    try {
+      this.clearCacheButton.disabled = true;
+      this.setStatus(AppState.IDLE, "Clearing cache...");
+      
+      await invoke("clear_cache");
+      
+      this.setStatus(AppState.IDLE, "Cache cleared successfully");
+      this.clearCacheButton.disabled = false;
+    } catch (error) {
+      this.setStatus(AppState.ERROR, `Failed to clear cache: ${error}`);
+      this.clearCacheButton.disabled = false;
     }
   }
 

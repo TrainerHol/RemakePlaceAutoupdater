@@ -75,9 +75,10 @@ impl UpdateManager {
     }
 
     fn find_7z_asset(assets: &[GitHubAsset]) -> Option<String> {
-        // Look for .7z files first
+        // Look for .7z files first (preferred)
         for asset in assets {
             if asset.name.ends_with(".7z") {
+                println!("Found .7z asset: {}", asset.name);
                 return Some(asset.browser_download_url.clone());
             }
         }
@@ -85,8 +86,30 @@ impl UpdateManager {
         // Fallback to .zip files
         for asset in assets {
             if asset.name.ends_with(".zip") {
+                println!("Found .zip asset (fallback): {}", asset.name);
                 return Some(asset.browser_download_url.clone());
             }
+        }
+        
+        // Additional fallbacks for other supported formats
+        for asset in assets {
+            if asset.name.ends_with(".tar.gz") || asset.name.ends_with(".tgz") {
+                println!("Found .tar.gz asset (fallback): {}", asset.name);
+                return Some(asset.browser_download_url.clone());
+            }
+        }
+        
+        for asset in assets {
+            if asset.name.ends_with(".tar.zst") || asset.name.ends_with(".tar.zstd") {
+                println!("Found .tar.zst asset (fallback): {}", asset.name);
+                return Some(asset.browser_download_url.clone());
+            }
+        }
+        
+        // Log what assets are available for debugging
+        println!("No supported archive format found. Available assets:");
+        for asset in assets {
+            println!("  - {}", asset.name);
         }
         
         None

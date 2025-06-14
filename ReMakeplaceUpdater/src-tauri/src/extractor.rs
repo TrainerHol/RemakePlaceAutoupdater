@@ -415,9 +415,9 @@ impl Extractor {
     }
 
     async fn try_extract_zst(archive_path: &Path, destination: &Path) -> Result<()> {
-        if !Self::file_has_extensions(archive_path, &[".zst", ".zstd"]) || 
-           Self::file_has_extensions(archive_path, &[".tar.zst", ".tar.zstd"]) {
-            return Err(anyhow::anyhow!("Not a standalone zst file"));
+        // More permissive check - try zst extraction if file has zst extension
+        if !Self::file_has_extensions(archive_path, &[".zst", ".zstd"]) {
+            return Err(anyhow::anyhow!("Not a zst file"));
         }
 
         println!("Attempting ZST extraction...");
@@ -425,21 +425,34 @@ impl Extractor {
         let file = fs::File::open(archive_path)
             .context("Failed to open zst file")?;
         
+        // Try to create decoder first to validate it's a valid zst file
         let mut decompressor = zstd::stream::read::Decoder::new(file)
-            .context("Failed to create zstd decoder")?;
+            .context("Failed to create zstd decoder - file may not be a valid ZST archive")?;
         
-        // Extract to a file with the same name but without .zst extension
-        let output_name = archive_path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("extracted_file");
+        // For .tar.zst files, we should have caught them earlier, but if we get here, 
+        // it might be a misnamed standalone zst file, so try to extract it anyway
+        let output_name = if Self::file_has_extensions(archive_path, &[".tar.zst", ".tar.zstd"]) {
+            // If it has tar.zst extension but we're treating it as standalone zst,
+            // extract with .tar extension so it can be processed by tar extraction later
+            archive_path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("extracted_file")
+        } else {
+            // Normal standalone zst file - remove .zst extension
+            archive_path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("extracted_file")
+        };
+        
         let output_path = destination.join(output_name);
         
         let mut output_file = fs::File::create(&output_path)
             .context("Failed to create output file")?;
         
         std::io::copy(&mut decompressor, &mut output_file)
-            .context("Failed to decompress zst file")?;
+            .context("Failed to decompress zst file - the file may be corrupted or not a valid ZST archive")?;
 
+        println!("Successfully extracted ZST file to: {}", output_path.display());
         Ok(())
     }
 
