@@ -5,7 +5,7 @@ use std::io::{Write, Read};
 use std::time::Instant;
 use anyhow::{Result, Context};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct ProgressInfo {
     pub percentage: f64,
     pub speed: f64,         // MB/s
@@ -371,13 +371,4 @@ impl Downloader {
     }
 }
 
-impl Default for ProgressInfo {
-    fn default() -> Self {
-        Self {
-            percentage: 0.0,
-            speed: 0.0,
-            downloaded: 0,
-            total: 0,
-        }
-    }
-} 
+ 

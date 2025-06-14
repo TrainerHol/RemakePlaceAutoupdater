@@ -18,21 +18,17 @@ use extractor::Extractor;
 use launcher::Launcher;
 
 // Application state to track current operations
+#[derive(Default)]
 pub struct AppState {
-    pub current_config: Arc<Mutex<Option<Config>>>,
-    pub download_progress: Arc<Mutex<ProgressInfo>>,
-    pub is_updating: Arc<Mutex<bool>>,
-    pub is_downloading: Arc<Mutex<bool>>,
+    pub current_config: Option<Config>,
+    pub download_progress: ProgressInfo,
+    pub is_updating: bool,
+    pub is_downloading: bool,
 }
 
 impl AppState {
     pub fn new() -> Self {
-        Self {
-            current_config: Arc::new(Mutex::new(None)),
-            download_progress: Arc::new(Mutex::new(ProgressInfo::default())),
-            is_updating: Arc::new(Mutex::new(false)),
-            is_downloading: Arc::new(Mutex::new(false)),
-        }
+        Self::default()
     }
 }
 
@@ -66,15 +62,15 @@ async fn start_download(
     version: String,
     original_filename: String,
     app_handle: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
     // Check if a download is already in progress
     {
-        let mut downloading = state.is_downloading.lock().await;
-        if *downloading {
+        let mut app_state = state.lock().await;
+        if app_state.is_downloading {
             return Err("Download already in progress".to_string());
         }
-        *downloading = true;
+        app_state.is_downloading = true;
     }
 
     let cache_dir = Downloader::get_cache_directory();
@@ -87,7 +83,7 @@ async fn start_download(
             Ok(true) => {
                 println!("Found valid cached file: {}", filepath.display());
                 // Reset download state since we're using cached file
-                *state.is_downloading.lock().await = false;
+                state.lock().await.is_downloading = false;
                 return Ok(filepath.to_string_lossy().to_string());
             }
             Ok(false) => {
@@ -118,7 +114,7 @@ async fn start_download(
         let download_result = Downloader::download_file_with_resume(&url, &filepath_clone, resume_download, progress_callback).await;
         
         // Always reset download state when done
-        *state_clone.is_downloading.lock().await = false;
+        state_clone.lock().await.is_downloading = false;
 
         match download_result {
             Ok(()) => {
@@ -396,7 +392,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(app_state)
+        .manage(Arc::new(Mutex::new(app_state)))
         .invoke_handler(tauri::generate_handler![
             load_config,
             save_config,
