@@ -214,8 +214,6 @@ impl Downloader {
     }
 
     async fn check_disk_space(filepath: &Path) -> Result<()> {
-        use std::fs;
-        
         // Get the directory where the file will be stored
         let dir = filepath.parent().unwrap_or(Path::new("."));
         
@@ -233,7 +231,8 @@ impl Downloader {
             let result = unsafe { libc::statvfs(path_cstr.as_ptr(), &mut statvfs) };
             
             if result == 0 {
-                let available_bytes = statvfs.f_bavail * statvfs.f_frsize;
+                // Cast to u64 to handle different platforms (macOS vs Linux have different field types)
+                let available_bytes = (statvfs.f_bavail as u64) * (statvfs.f_frsize as u64);
                 let min_required = 100 * 1024 * 1024; // Require at least 100MB free
                 
                 if available_bytes < min_required {
@@ -252,6 +251,7 @@ impl Downloader {
         
         #[cfg(windows)]
         {
+            use std::fs;
             // Basic space check for Windows - create a small test file
             let test_file = dir.join(".space_test");
             match fs::File::create(&test_file) {
