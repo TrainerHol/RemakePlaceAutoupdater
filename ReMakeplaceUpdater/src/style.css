@@ -227,23 +227,26 @@ body {
 /* Button Section */
 .button-section {
   display: flex;
-  gap: 15px;
+  gap: 12px;
   justify-content: center;
+  align-items: center;
   margin-top: auto;
-  padding-bottom: 30px;
+  padding: 20px 15px;
+  flex-wrap: wrap;
 }
 
 /* Buttons */
 .btn {
-  padding: 12px 24px;
+  padding: 10px 20px;
   border: none;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 16px;
-  min-width: 160px;
+  font-size: 14px;
+  min-width: 120px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
 }
 
 .btn:disabled {
@@ -294,9 +297,9 @@ body {
 }
 
 .btn-small {
-  padding: 6px 12px;
-  font-size: 14px;
-  min-width: auto;
+  padding: 8px 16px;
+  font-size: 12px;
+  min-width: 80px;
 }
 
 /* Modal Styles */
@@ -411,8 +414,20 @@ body {
   }
 
   .button-section {
-    flex-direction: column;
-    align-items: center;
+    gap: 8px;
+    padding: 15px 10px;
+  }
+  
+  .btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    min-width: 100px;
+  }
+  
+  .btn-small {
+    padding: 6px 12px;
+    font-size: 11px;
+    min-width: 70px;
   }
 
   .path-display {
@@ -451,4 +466,50 @@ body {
 
 *::-webkit-scrollbar-thumb:hover {
   background-color: #ff8c42;
+}
+
+/* Confirmation Modal */
+.confirmation-modal {
+  max-width: 500px;
+  min-width: 400px;
+}
+
+.confirmation-message {
+  color: #cccccc;
+  line-height: 1.5;
+  white-space: pre-line;
+  font-size: 14px;
+  margin: 10px 0;
+}
+
+/* Help text styles */
+.help-text {
+  font-size: 12px;
+  color: #999999;
+  margin-top: 5px;
+  font-style: italic;
+  cursor: help;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.help-text:hover {
+  color: #cccccc;
+}
+
+/* Version override styles */
+.form-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.form-group label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
 }

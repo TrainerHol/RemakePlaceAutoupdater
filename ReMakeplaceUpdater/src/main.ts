@@ -112,6 +112,22 @@ class ReMakeplaceUpdater {
             </div>
           </div>
         </div>
+
+        <!-- Confirmation Modal (hidden by default) -->
+        <div id="confirmation-modal" class="modal" style="display: none;">
+          <div class="modal-content confirmation-modal">
+            <div class="modal-header">
+              <h2 id="confirmation-title">Confirm Action</h2>
+            </div>
+            <div class="modal-body">
+              <div id="confirmation-message" class="confirmation-message"></div>
+            </div>
+            <div class="modal-footer">
+              <button id="confirmation-cancel" class="btn btn-secondary">Cancel</button>
+              <button id="confirmation-confirm" class="btn btn-primary">Confirm</button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
 
@@ -138,7 +154,15 @@ class ReMakeplaceUpdater {
           try {
             this.config = await invoke<Config>("set_version_to_latest", { config: this.config });
             this.updateUI();
-            this.setStatus(AppState.IDLE, "Version updated to latest");
+            
+            // Close the modal and refresh the main UI
+            const modal = document.getElementById("settings-modal")!;
+            modal.style.display = "none";
+            
+            // Reload configuration to update UI state properly
+            await this.loadConfiguration();
+            
+            this.setStatus(AppState.UP_TO_DATE, "Version synced to latest");
           } catch (error) {
             this.setStatus(AppState.ERROR, `Failed to update version: ${error}`);
             versionOverrideCheckbox.checked = false;
@@ -365,12 +389,10 @@ class ReMakeplaceUpdater {
 
     // Show confirmation dialog for fresh installs
     if (isFreshInstall) {
-      const confirmMessage = `This will install ReMakeplace ${this.updateInfo.latest_version} to:\n\n${this.config.installation_path}\n\nDo you want to proceed?`;
-      const { confirm } = await import("@tauri-apps/plugin-dialog");
-      const confirmed = await confirm(confirmMessage, {
-        title: "Confirm Fresh Installation",
-        kind: "info",
-      });
+      const confirmed = await this.showConfirmation(
+        "Confirm Fresh Installation",
+        `This will install ReMakeplace ${this.updateInfo.latest_version} to:\n\n${this.config.installation_path}\n\nDo you want to proceed?`
+      );
       
       if (!confirmed) {
         return;
@@ -445,20 +467,15 @@ class ReMakeplaceUpdater {
     this.setStatus(AppState.UP_TO_DATE, successMessage);
     this.progressSection.style.display = "none";
 
-    // Update installation mode to "update" after successful fresh install
-    if (wasFreshInstall && this.config) {
+    // Update installation mode and version after successful fresh install
+    if (wasFreshInstall && this.config && this.updateInfo) {
       this.config.installation_mode = "update";
+      this.config.current_version = this.updateInfo.latest_version;
       await invoke("save_config", { config: this.config });
     }
 
-    // Reload configuration to get updated version
+    // Reload configuration to get updated version and status
     await this.loadConfiguration();
-
-    this.updateButton.textContent = "Up to Date";
-    this.updateButton.disabled = true;
-    this.updateButton.classList.remove("btn-update", "btn-install");
-    this.launchButton.disabled = false;
-    this.launchButton.textContent = "Launch ReMakeplace";
   }
 
   private async launchGame() {
@@ -588,13 +605,9 @@ class ReMakeplaceUpdater {
       const willBeFreshInstall = mode === "fresh_install";
       
       if (wasExistingInstall && willBeFreshInstall) {
-        const { confirm } = await import("@tauri-apps/plugin-dialog");
-        const confirmed = await confirm(
-          `The selected folder doesn't contain an existing ReMakeplace installation.\n\nDo you want to perform a fresh installation at:\n${path}`,
-          {
-            title: "Fresh Installation",
-            kind: "warning",
-          }
+        const confirmed = await this.showConfirmation(
+          "Fresh Installation",
+          `The selected folder doesn't contain an existing ReMakeplace installation.\n\nDo you want to perform a fresh installation at:\n${path}`
         );
         
         if (!confirmed) {
@@ -645,6 +658,47 @@ class ReMakeplaceUpdater {
     if (state === AppState.ERROR) {
       this.statusMessage.classList.add("error");
     }
+  }
+
+  private showConfirmation(title: string, message: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const modal = document.getElementById("confirmation-modal")!;
+      const titleElement = document.getElementById("confirmation-title")!;
+      const messageElement = document.getElementById("confirmation-message")!;
+      const cancelBtn = document.getElementById("confirmation-cancel")!;
+      const confirmBtn = document.getElementById("confirmation-confirm")!;
+
+      titleElement.textContent = title;
+      messageElement.textContent = message;
+      modal.style.display = "flex";
+
+      const cleanup = () => {
+        modal.style.display = "none";
+        cancelBtn.removeEventListener("click", handleCancel);
+        confirmBtn.removeEventListener("click", handleConfirm);
+        modal.removeEventListener("click", handleOutsideClick);
+      };
+
+      const handleCancel = () => {
+        cleanup();
+        resolve(false);
+      };
+
+      const handleConfirm = () => {
+        cleanup();
+        resolve(true);
+      };
+
+      const handleOutsideClick = (e: Event) => {
+        if (e.target === modal) {
+          handleCancel();
+        }
+      };
+
+      cancelBtn.addEventListener("click", handleCancel);
+      confirmBtn.addEventListener("click", handleConfirm);
+      modal.addEventListener("click", handleOutsideClick);
+    });
   }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "remakeplaceupdater"
-version = "1.2.0"
+version = "1.2.1"
 description = "Auto updater for ReMakeplace"
 authors = ["Hol"]
 edition = "2021"
