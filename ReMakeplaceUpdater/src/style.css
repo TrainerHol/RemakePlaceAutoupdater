@@ -173,6 +173,18 @@ body {
   color: #ff6b6b;
 }
 
+.status-message.fresh_install_ready {
+  background-color: #1a4d4d;
+  border-color: #00bfa5;
+  color: #00e5cc;
+}
+
+.status-message.no_installation {
+  background-color: #4d3a1a;
+  border-color: #ff9800;
+  color: #ffb74d;
+}
+
 /* Progress Section */
 .progress-section {
   background-color: #2d2d2d;

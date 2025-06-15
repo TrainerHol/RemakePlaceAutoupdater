@@ -11,7 +11,7 @@ mod downloader;
 mod extractor;
 mod launcher;
 
-use config::{Config, ConfigManager};
+use config::{Config, ConfigManager, InstallationMode};
 use updater::{UpdateInfo, UpdateManager};
 use downloader::{Downloader, ProgressInfo};
 use extractor::Extractor;
@@ -45,8 +45,27 @@ async fn save_config(config: Config) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn validate_path(path: String, exe_name: String) -> Result<bool, String> {
-    Ok(ConfigManager::validate_installation_path(&path, &exe_name))
+async fn validate_path(path: String, exe_name: String, mode: InstallationMode) -> Result<bool, String> {
+    Ok(ConfigManager::validate_installation_path(&path, &exe_name, &mode))
+}
+
+#[tauri::command]
+async fn detect_installation_mode(path: String, exe_name: String) -> Result<InstallationMode, String> {
+    Ok(ConfigManager::detect_installation_mode(&path, &exe_name))
+}
+
+#[tauri::command]
+async fn set_version_to_latest(mut config: Config) -> Result<Config, String> {
+    // Check for latest version and update config
+    match UpdateManager::check_for_updates(&config).await {
+        Ok(update_info) => {
+            config.current_version = update_info.latest_version;
+            config.last_check = chrono::Utc::now().to_rfc3339();
+            ConfigManager::save_config(&config).map_err(|e| e.to_string())?;
+            Ok(config)
+        }
+        Err(e) => Err(format!("Failed to fetch latest version: {}", e))
+    }
 }
 
 #[tauri::command]
@@ -154,27 +173,33 @@ async fn install_update(
     tokio::spawn(async move {
         let _ = app_handle.emit("status-update", "Starting installation...");
 
-        // Backup user data
-        let _ = app_handle.emit("status-update", "Backing up user data...");
-        if let Err(e) = backup_user_data(&installation_path, &config.preserve_folders).await {
-            let _ = app_handle.emit("error", &format!("Backup failed: {}", e));
-            return;
+        // Only backup user data if this is an update (not fresh install)
+        if config.installation_mode == InstallationMode::Update {
+            let _ = app_handle.emit("status-update", "Backing up user data...");
+            if let Err(e) = backup_user_data(&installation_path, &config.preserve_folders).await {
+                let _ = app_handle.emit("error", &format!("Backup failed: {}", e));
+                return;
+            }
         }
 
         // Extract archive
-        let _ = app_handle.emit("status-update", "Extracting update...");
+        let _ = app_handle.emit("status-update", "Extracting files...");
         if let Err(e) = Extractor::extract_archive(&archive_path, &installation_path).await {
             let _ = app_handle.emit("error", &format!("Extraction failed: {}", e));
-            // Try to restore backup
-            let _ = restore_user_data(&installation_path, &config.preserve_folders).await;
+            // Try to restore backup if this was an update
+            if config.installation_mode == InstallationMode::Update {
+                let _ = restore_user_data(&installation_path, &config.preserve_folders).await;
+            }
             return;
         }
 
-        // Restore user data
-        let _ = app_handle.emit("status-update", "Restoring user data...");
-        if let Err(e) = restore_user_data(&installation_path, &config.preserve_folders).await {
-            let _ = app_handle.emit("error", &format!("Failed to restore user data: {}", e));
-            return;
+        // Restore user data if this was an update
+        if config.installation_mode == InstallationMode::Update {
+            let _ = app_handle.emit("status-update", "Restoring user data...");
+            if let Err(e) = restore_user_data(&installation_path, &config.preserve_folders).await {
+                let _ = app_handle.emit("error", &format!("Failed to restore user data: {}", e));
+                return;
+            }
         }
 
         // Update config with new version
@@ -397,6 +422,8 @@ pub fn run() {
             load_config,
             save_config,
             validate_path,
+            detect_installation_mode,
+            set_version_to_latest,
             check_updates,
             start_download,
             install_update,

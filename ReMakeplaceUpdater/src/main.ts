@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Config, UpdateInfo, ProgressInfo, AppStatus } from "./types";
+import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode } from "./types";
 import { AppState } from "./types";
 
 class ReMakeplaceUpdater {
@@ -98,6 +98,13 @@ class ReMakeplaceUpdater {
                 </div>
                 <div id="path-validation" class="validation-message"></div>
               </div>
+              <div class="form-group" id="version-override-group" style="display: none;">
+                <label>
+                  <input type="checkbox" id="version-override" />
+                  Set current version to latest
+                </label>
+                <div class="help-text" title="If your installation shows version 0.0.0 but is actually up to date, check this to sync with the latest version without reinstalling.">ⓘ For existing installations showing incorrect version</div>
+              </div>
             </div>
             <div class="modal-footer">
               <button id="cancel-btn" class="btn btn-secondary">Cancel</button>
@@ -123,6 +130,22 @@ class ReMakeplaceUpdater {
   }
 
   private setupEventListeners() {
+    // Version override checkbox listener
+    const versionOverrideCheckbox = document.getElementById("version-override") as HTMLInputElement;
+    if (versionOverrideCheckbox) {
+      versionOverrideCheckbox.addEventListener("change", async () => {
+        if (versionOverrideCheckbox.checked) {
+          try {
+            this.config = await invoke<Config>("set_version_to_latest", { config: this.config });
+            this.updateUI();
+            this.setStatus(AppState.IDLE, "Version updated to latest");
+          } catch (error) {
+            this.setStatus(AppState.ERROR, `Failed to update version: ${error}`);
+            versionOverrideCheckbox.checked = false;
+          }
+        }
+      });
+    }
     // Tauri event listeners
     listen<ProgressInfo>("download-progress", (event) => {
       this.updateProgress(event.payload);
@@ -178,7 +201,8 @@ class ReMakeplaceUpdater {
 
     // UI event listeners
     this.updateButton.addEventListener("click", () => {
-      if (this.currentStatus.state === AppState.UPDATE_AVAILABLE) {
+      if (this.currentStatus.state === AppState.UPDATE_AVAILABLE || 
+          this.currentStatus.state === AppState.FRESH_INSTALL_READY) {
         this.startUpdate();
       } else {
         this.checkForUpdates();
@@ -233,11 +257,27 @@ class ReMakeplaceUpdater {
       this.config = await invoke<Config>("load_config");
       this.updateUI();
 
-      if (!this.config.installation_path || !(await this.validateInstallationPath())) {
+      if (!this.config.installation_path) {
         this.isFirstRun = true;
+        this.setStatus(AppState.NO_INSTALLATION, "No installation configured");
         this.showSettings(true);
       } else {
-        this.checkForUpdates();
+        // Check installation mode and path validity
+        const mode = await invoke<InstallationMode>("detect_installation_mode", {
+          path: this.config.installation_path,
+          exeName: this.config.exe_path,
+        });
+        
+        this.config.installation_mode = mode;
+        
+        if (mode === "fresh_install") {
+          this.setStatus(AppState.FRESH_INSTALL_READY, "Ready for fresh installation");
+          this.updateButton.textContent = "Install ReMakeplace";
+          this.updateButton.disabled = false;
+          this.updateButton.classList.add("btn-install");
+        } else {
+          this.checkForUpdates();
+        }
       }
     } catch (error) {
       console.error("Failed to load configuration:", error);
@@ -249,9 +289,15 @@ class ReMakeplaceUpdater {
     if (!this.config) return false;
 
     try {
+      const mode = await invoke<InstallationMode>("detect_installation_mode", {
+        path: this.config.installation_path,
+        exeName: this.config.exe_path,
+      });
+      
       return await invoke<boolean>("validate_path", {
         path: this.config.installation_path,
         exeName: this.config.exe_path,
+        mode: mode,
       });
     } catch (error) {
       return false;
@@ -264,8 +310,16 @@ class ReMakeplaceUpdater {
     this.currentVersionElement.textContent = this.config.current_version;
     this.installationPathElement.textContent = this.config.installation_path || "Not configured";
 
-    // Update launch button state
-    this.launchButton.disabled = !this.config.installation_path;
+    // Update launch button state based on installation mode
+    if (!this.config.installation_path) {
+      this.launchButton.disabled = true;
+    } else if (this.config.installation_mode === "fresh_install") {
+      this.launchButton.disabled = true;
+      this.launchButton.textContent = "Install Required";
+    } else {
+      this.launchButton.disabled = false;
+      this.launchButton.textContent = "Launch ReMakeplace";
+    }
   }
 
   private async checkForUpdates() {
@@ -276,15 +330,19 @@ class ReMakeplaceUpdater {
 
     try {
       this.updateInfo = await invoke<UpdateInfo>("check_updates", { config: this.config });
+      this.latestVersionElement.textContent = this.updateInfo.latest_version;
 
-      if (this.updateInfo.is_available) {
-        this.latestVersionElement.textContent = this.updateInfo.latest_version;
+      if (this.config.installation_mode === "fresh_install") {
+        this.setStatus(AppState.FRESH_INSTALL_READY, `Ready to install version ${this.updateInfo.latest_version}`);
+        this.updateButton.textContent = "Install Now";
+        this.updateButton.disabled = false;
+        this.updateButton.classList.add("btn-install");
+      } else if (this.updateInfo.is_available) {
         this.setStatus(AppState.UPDATE_AVAILABLE, `Update available: ${this.updateInfo.latest_version}`);
         this.updateButton.textContent = "Update Now";
         this.updateButton.disabled = false;
         this.updateButton.classList.add("btn-update");
       } else {
-        this.latestVersionElement.textContent = this.config.current_version;
         this.setStatus(AppState.UP_TO_DATE, "You have the latest version");
         this.updateButton.textContent = "Up to Date";
         this.updateButton.disabled = true;
@@ -298,9 +356,29 @@ class ReMakeplaceUpdater {
   }
 
   private async startUpdate() {
-    if (!this.config || !this.updateInfo?.is_available) return;
+    if (!this.config || !this.updateInfo) return;
 
-    this.setStatus(AppState.DOWNLOADING, "Starting download...");
+    // Check if this is a fresh install or update
+    const isFreshInstall = this.config.installation_mode === "fresh_install";
+    
+    if (!isFreshInstall && !this.updateInfo.is_available) return;
+
+    // Show confirmation dialog for fresh installs
+    if (isFreshInstall) {
+      const confirmMessage = `This will install ReMakeplace ${this.updateInfo.latest_version} to:\n\n${this.config.installation_path}\n\nDo you want to proceed?`;
+      const { confirm } = await import("@tauri-apps/plugin-dialog");
+      const confirmed = await confirm(confirmMessage, {
+        title: "Confirm Fresh Installation",
+        kind: "info",
+      });
+      
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const statusMessage = isFreshInstall ? "Starting fresh installation..." : "Starting download...";
+    this.setStatus(AppState.DOWNLOADING, statusMessage);
     this.progressSection.style.display = "block";
     this.updateButton.disabled = true;
 
@@ -332,7 +410,12 @@ class ReMakeplaceUpdater {
   private async onDownloadComplete() {
     if (!this.config || !this.updateInfo) return;
 
-    this.setStatus(AppState.INSTALLING, "Download complete, starting installation...");
+    const isFreshInstall = this.config.installation_mode === "fresh_install";
+    const statusMessage = isFreshInstall 
+      ? "Download complete, starting fresh installation..." 
+      : "Download complete, starting installation...";
+    
+    this.setStatus(AppState.INSTALLING, statusMessage);
 
     try {
       const filename = this.updateInfo.download_url.split("/").pop() || "update.7z";
@@ -354,15 +437,28 @@ class ReMakeplaceUpdater {
   }
 
   private async onUpdateComplete() {
-    this.setStatus(AppState.UP_TO_DATE, "Update completed successfully!");
+    const wasFreshInstall = this.config?.installation_mode === "fresh_install";
+    const successMessage = wasFreshInstall 
+      ? "Fresh installation completed successfully!" 
+      : "Update completed successfully!";
+    
+    this.setStatus(AppState.UP_TO_DATE, successMessage);
     this.progressSection.style.display = "none";
+
+    // Update installation mode to "update" after successful fresh install
+    if (wasFreshInstall && this.config) {
+      this.config.installation_mode = "update";
+      await invoke("save_config", { config: this.config });
+    }
 
     // Reload configuration to get updated version
     await this.loadConfiguration();
 
     this.updateButton.textContent = "Up to Date";
     this.updateButton.disabled = true;
-    this.updateButton.classList.remove("btn-update");
+    this.updateButton.classList.remove("btn-update", "btn-install");
+    this.launchButton.disabled = false;
+    this.launchButton.textContent = "Launch ReMakeplace";
   }
 
   private async launchGame() {
@@ -383,14 +479,35 @@ class ReMakeplaceUpdater {
     const modal = document.getElementById("settings-modal")!;
     const pathInput = document.getElementById("path-input") as HTMLInputElement;
     const modalHeader = modal.querySelector(".modal-header h2") as HTMLElement;
+    const versionOverrideGroup = document.getElementById("version-override-group")!;
+    const versionOverrideCheckbox = document.getElementById("version-override") as HTMLInputElement;
 
     if (isFirstRun) {
       modalHeader.textContent = "Welcome to ReMakeplace Launcher";
       const modalBody = modal.querySelector(".modal-body")!;
-      modalBody.insertAdjacentHTML("afterbegin", '<p class="welcome-message">Please select your ReMakeplace installation folder to continue.</p>');
+      const existingWelcome = modalBody.querySelector(".welcome-message");
+      if (!existingWelcome) {
+        modalBody.insertAdjacentHTML("afterbegin", '<p class="welcome-message">Please select your ReMakeplace installation folder to continue.</p>');
+      }
+    } else {
+      modalHeader.textContent = "Settings";
+      const existingWelcome = modal.querySelector(".welcome-message");
+      if (existingWelcome) {
+        existingWelcome.remove();
+      }
     }
 
     pathInput.value = this.config?.installation_path || "";
+    
+    // Show version override option for existing installations with version 0.0.0
+    if (this.config && this.config.current_version === "0.0.0" && 
+        this.config.installation_path && this.config.installation_mode === "update") {
+      versionOverrideGroup.style.display = "block";
+      versionOverrideCheckbox.checked = false;
+    } else {
+      versionOverrideGroup.style.display = "none";
+    }
+    
     modal.style.display = "flex";
 
     if (this.config?.installation_path) {
@@ -410,17 +527,29 @@ class ReMakeplaceUpdater {
     }
 
     try {
-      const isValid = await invoke<boolean>("validate_path", {
+      // Detect installation mode
+      const mode = await invoke<InstallationMode>("detect_installation_mode", {
         path: path,
         exeName: this.config?.exe_path || "Makeplace.exe",
       });
 
+      const isValid = await invoke<boolean>("validate_path", {
+        path: path,
+        exeName: this.config?.exe_path || "Makeplace.exe",
+        mode: mode,
+      });
+
       if (isValid) {
-        validation.textContent = "✅ Valid installation path";
-        validation.className = "validation-message valid";
+        if (mode === "fresh_install") {
+          validation.textContent = "✅ Valid folder for fresh installation";
+          validation.className = "validation-message valid";
+        } else {
+          validation.textContent = "✅ Valid installation path";
+          validation.className = "validation-message valid";
+        }
         saveBtn.disabled = false;
       } else {
-        validation.textContent = "❌ Invalid path or Makeplace.exe not found";
+        validation.textContent = "❌ Invalid path or inaccessible folder";
         validation.className = "validation-message invalid";
         saveBtn.disabled = true;
       }
@@ -448,7 +577,33 @@ class ReMakeplaceUpdater {
     if (!this.config) return;
 
     try {
+      // Detect and set installation mode
+      const mode = await invoke<InstallationMode>("detect_installation_mode", {
+        path: path,
+        exeName: this.config.exe_path,
+      });
+      
+      // Check if user is switching from an existing installation to a fresh install location
+      const wasExistingInstall = this.config.installation_path && this.config.installation_mode === "update";
+      const willBeFreshInstall = mode === "fresh_install";
+      
+      if (wasExistingInstall && willBeFreshInstall) {
+        const { confirm } = await import("@tauri-apps/plugin-dialog");
+        const confirmed = await confirm(
+          `The selected folder doesn't contain an existing ReMakeplace installation.\n\nDo you want to perform a fresh installation at:\n${path}`,
+          {
+            title: "Fresh Installation",
+            kind: "warning",
+          }
+        );
+        
+        if (!confirmed) {
+          return;
+        }
+      }
+      
       this.config.installation_path = path;
+      this.config.installation_mode = mode;
       await invoke("save_config", { config: this.config });
 
       const modal = document.getElementById("settings-modal")!;
@@ -456,7 +611,7 @@ class ReMakeplaceUpdater {
 
       this.updateUI();
 
-      if (this.isFirstRun) {
+      if (this.isFirstRun || mode === "fresh_install") {
         this.isFirstRun = false;
         this.checkForUpdates();
       }

@@ -13,6 +13,19 @@ pub struct Config {
     pub update_check_url: String,
     pub last_check: String,
     pub auto_check: bool,
+    #[serde(default = "default_installation_mode")]
+    pub installation_mode: InstallationMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallationMode {
+    Update,
+    FreshInstall,
+}
+
+fn default_installation_mode() -> InstallationMode {
+    InstallationMode::Update
 }
 
 pub struct ConfigManager;
@@ -60,10 +73,11 @@ impl ConfigManager {
             update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest".to_string(),
             last_check: chrono::Utc::now().to_rfc3339(),
             auto_check: true,
+            installation_mode: InstallationMode::Update,
         }
     }
 
-    pub fn validate_installation_path(path: &str, exe_name: &str) -> bool {
+    pub fn validate_installation_path(path: &str, exe_name: &str, mode: &InstallationMode) -> bool {
         if path.is_empty() {
             return false;
         }
@@ -73,8 +87,35 @@ impl ConfigManager {
             return false;
         }
 
+        match mode {
+            InstallationMode::Update => {
+                // For updates, exe must exist
+                let exe_path = path_buf.join(exe_name);
+                exe_path.exists() && exe_path.is_file()
+            }
+            InstallationMode::FreshInstall => {
+                // For fresh installs, directory just needs to exist and be writable
+                true
+            }
+        }
+    }
+
+    pub fn detect_installation_mode(path: &str, exe_name: &str) -> InstallationMode {
+        if path.is_empty() {
+            return InstallationMode::FreshInstall;
+        }
+
+        let path_buf = PathBuf::from(path);
+        if !path_buf.exists() {
+            return InstallationMode::FreshInstall;
+        }
+
         let exe_path = path_buf.join(exe_name);
-        exe_path.exists() && exe_path.is_file()
+        if exe_path.exists() && exe_path.is_file() {
+            InstallationMode::Update
+        } else {
+            InstallationMode::FreshInstall
+        }
     }
 
     fn get_config_path() -> PathBuf {

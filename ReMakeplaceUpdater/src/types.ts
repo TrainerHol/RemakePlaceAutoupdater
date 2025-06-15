@@ -1,3 +1,5 @@
+export type InstallationMode = "update" | "fresh_install";
+
 export interface Config {
   current_version: string;
   github_repo: string;
@@ -7,6 +9,7 @@ export interface Config {
   update_check_url: string;
   last_check: string;
   auto_check: boolean;
+  installation_mode: InstallationMode;
 }
 
 export interface UpdateInfo {
@@ -30,6 +33,8 @@ export enum AppState {
   INSTALLING = "installing",
   UP_TO_DATE = "up_to_date",
   ERROR = "error",
+  FRESH_INSTALL_READY = "fresh_install_ready",
+  NO_INSTALLATION = "no_installation",
 }
 
 export interface AppStatus {
