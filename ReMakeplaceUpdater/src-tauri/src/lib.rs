@@ -10,12 +10,15 @@ mod updater;
 mod downloader;
 mod extractor;
 mod launcher;
+mod retry_manager;
+mod error_handler;
 
 use config::{Config, ConfigManager, InstallationMode};
 use updater::{UpdateInfo, UpdateManager};
 use downloader::{Downloader, ProgressInfo};
 use extractor::Extractor;
 use launcher::Launcher;
+use error_handler::{ErrorHandler, ErrorInfo};
 
 // Application state to track current operations
 #[derive(Default)]
@@ -47,6 +50,19 @@ async fn save_config(config: Config) -> Result<(), String> {
 #[tauri::command]
 async fn validate_path(path: String, exe_name: String, mode: InstallationMode) -> Result<bool, String> {
     Ok(ConfigManager::validate_installation_path(&path, &exe_name, &mode))
+}
+
+#[tauri::command]
+async fn validate_path_detailed(path: String, exe_name: String, mode: InstallationMode) -> Result<String, ErrorInfo> {
+    match ConfigManager::validate_installation_path_detailed(&path, &exe_name, &mode) {
+        Ok(()) => Ok("Path is valid".to_string()),
+        Err(error_info) => Err(error_info),
+    }
+}
+
+#[tauri::command]
+async fn get_mode_description(mode: InstallationMode) -> Result<String, String> {
+    Ok(ConfigManager::get_mode_description(&mode).to_string())
 }
 
 #[tauri::command]
@@ -145,15 +161,18 @@ async fn start_download(
                     Ok(false) => {
                         // Remove invalid file
                         let _ = std::fs::remove_file(&filepath_clone);
-                        let _ = app_handle_error.emit("download-error", "Downloaded file failed validation");
+                        let error_info = ErrorHandler::categorize_error(&anyhow::anyhow!("Downloaded file failed validation"));
+                        let _ = app_handle_error.emit("download-error", &error_info);
                     }
                     Err(e) => {
-                        let _ = app_handle_error.emit("download-error", &format!("Error validating downloaded file: {}", e));
+                        let error_info = ErrorHandler::categorize_error(&e);
+                        let _ = app_handle_error.emit("download-error", &error_info);
                     }
                 }
             }
             Err(e) => {
-                let _ = app_handle_error.emit("download-error", &e.to_string());
+                let error_info = ErrorHandler::categorize_error(&e);
+                let _ = app_handle_error.emit("download-error", &error_info);
             }
         }
     });
@@ -422,7 +441,9 @@ pub fn run() {
             load_config,
             save_config,
             validate_path,
+            validate_path_detailed,
             detect_installation_mode,
+            get_mode_description,
             set_version_to_latest,
             check_updates,
             start_download,

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode } from "./types";
-import { AppState } from "./types";
+import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode, ErrorInfo } from "./types";
+import { AppState, ErrorCategory } from "./types";
 
 class ReMakeplaceUpdater {
   private config: Config | null = null;
@@ -179,44 +179,24 @@ class ReMakeplaceUpdater {
       this.onDownloadComplete();
     });
 
-    listen<string>("download-error", (event) => {
-      const errorMsg = event.payload;
-      let userFriendlyMsg = "Download failed";
-      
-      if (errorMsg.includes("network") || errorMsg.includes("connection")) {
-        userFriendlyMsg = "Download failed due to network issues. Check your internet connection and try again.";
-      } else if (errorMsg.includes("timeout")) {
-        userFriendlyMsg = "Download timed out. Try clearing cache and retrying.";
-      } else if (errorMsg.includes("validation")) {
-        userFriendlyMsg = "Downloaded file is corrupted. Try clearing cache and downloading again.";
-      } else if (errorMsg.includes("space") || errorMsg.includes("disk")) {
-        userFriendlyMsg = "Not enough disk space. Free up some space and try again.";
-      }
-      
-      this.setStatus(AppState.ERROR, `${userFriendlyMsg} (${errorMsg})`);
+    listen<ErrorInfo>("download-error", (event) => {
+      const errorInfo = event.payload;
+      this.handleDownloadError(errorInfo);
     });
 
     listen<string>("status-update", (event) => {
       this.setStatus(AppState.INSTALLING, event.payload);
     });
 
-    listen<string>("error", (event) => {
-      const errorMsg = event.payload;
-      let userFriendlyMsg = "An error occurred";
-      
-      if (errorMsg.includes("Extraction failed")) {
-        if (errorMsg.includes("zst")) {
-          userFriendlyMsg = "Archive extraction failed. The downloaded file may be corrupted or in an unsupported format. Try clearing cache and downloading again.";
-        } else {
-          userFriendlyMsg = "Failed to extract the update archive. The file may be corrupted.";
-        }
-      } else if (errorMsg.includes("Backup failed")) {
-        userFriendlyMsg = "Failed to backup your data before updating. Check that you have sufficient disk space.";
-      } else if (errorMsg.includes("Failed to restore")) {
-        userFriendlyMsg = "Update completed but failed to restore some user data. Check your installation directory.";
+    listen<ErrorInfo | string>("error", (event) => {
+      const payload = event.payload;
+      if (typeof payload === "string") {
+        // Legacy string error handling
+        this.handleLegacyError(payload);
+      } else {
+        // Enhanced error info handling
+        this.handleErrorInfo(payload);
       }
-      
-      this.setStatus(AppState.ERROR, `${userFriendlyMsg} (${errorMsg})`);
     });
 
     listen("update-complete", () => {
@@ -309,24 +289,6 @@ class ReMakeplaceUpdater {
     }
   }
 
-  private async validateInstallationPath(): Promise<boolean> {
-    if (!this.config) return false;
-
-    try {
-      const mode = await invoke<InstallationMode>("detect_installation_mode", {
-        path: this.config.installation_path,
-        exeName: this.config.exe_path,
-      });
-      
-      return await invoke<boolean>("validate_path", {
-        path: this.config.installation_path,
-        exeName: this.config.exe_path,
-        mode: mode,
-      });
-    } catch (error) {
-      return false;
-    }
-  }
 
   private updateUI() {
     if (!this.config) return;
@@ -424,9 +386,23 @@ class ReMakeplaceUpdater {
     progressFill.style.width = `${progress.percentage}%`;
 
     const speedText = progress.speed > 0 ? `${progress.speed.toFixed(1)} MB/s` : "0.0 MB/s";
-    this.progressText.textContent = `${progress.percentage.toFixed(1)}% - ${speedText}`;
+    let statusText = `${progress.percentage.toFixed(1)}% - ${speedText}`;
+    
+    // Show retry information if applicable
+    if (progress.is_retrying && progress.retry_count > 0) {
+      statusText += ` (Retry ${progress.retry_count})`;
+      if (progress.retry_reason) {
+        statusText += ` - ${progress.retry_reason}`;
+      }
+    }
+    
+    this.progressText.textContent = statusText;
 
-    this.setStatus(AppState.DOWNLOADING, `Downloading update... ${progress.percentage.toFixed(1)}%`);
+    const downloadMsg = progress.is_retrying 
+      ? `Retrying download... ${progress.percentage.toFixed(1)}%`
+      : `Downloading update... ${progress.percentage.toFixed(1)}%`;
+    
+    this.setStatus(AppState.DOWNLOADING, downloadMsg);
   }
 
   private async onDownloadComplete() {
@@ -537,11 +513,16 @@ class ReMakeplaceUpdater {
     const saveBtn = document.getElementById("save-btn") as HTMLButtonElement;
 
     if (!path.trim()) {
-      validation.textContent = "";
+      validation.innerHTML = "";
       validation.className = "validation-message";
       saveBtn.disabled = true;
       return;
     }
+
+    // Show loading state
+    validation.innerHTML = '<span class="validation-loading">🔄 Validating path...</span>';
+    validation.className = "validation-message loading";
+    saveBtn.disabled = true;
 
     try {
       // Detect installation mode
@@ -550,31 +531,66 @@ class ReMakeplaceUpdater {
         exeName: this.config?.exe_path || "Makeplace.exe",
       });
 
-      const isValid = await invoke<boolean>("validate_path", {
-        path: path,
-        exeName: this.config?.exe_path || "Makeplace.exe",
+      // Get mode description
+      const modeDescription = await invoke<string>("get_mode_description", {
         mode: mode,
       });
 
-      if (isValid) {
-        if (mode === "fresh_install") {
-          validation.textContent = "✅ Valid folder for fresh installation";
-          validation.className = "validation-message valid";
-        } else {
-          validation.textContent = "✅ Valid installation path";
-          validation.className = "validation-message valid";
-        }
+      // Validate with detailed error information
+      try {
+        await invoke<string>("validate_path_detailed", {
+          path: path,
+          exeName: this.config?.exe_path || "Makeplace.exe",
+          mode: mode,
+        });
+
+        // Path is valid
+        const modeText = mode === "fresh_install" ? "fresh installation" : "existing installation";
+        validation.innerHTML = `
+          <div class="validation-success">
+            <span class="validation-icon">✅</span>
+            <div class="validation-content">
+              <div class="validation-main">Valid path for ${modeText}</div>
+              <div class="validation-sub">${modeDescription}</div>
+            </div>
+          </div>
+        `;
+        validation.className = "validation-message valid";
         saveBtn.disabled = false;
-      } else {
-        validation.textContent = "❌ Invalid path or inaccessible folder";
-        validation.className = "validation-message invalid";
+      } catch (errorInfo: any) {
+        // Path validation failed with detailed error
+        this.showValidationError(validation, errorInfo);
         saveBtn.disabled = true;
       }
     } catch (error) {
-      validation.textContent = "❌ Error validating path";
+      // Fallback for unexpected errors
+      validation.innerHTML = `
+        <div class="validation-error">
+          <span class="validation-icon">❌</span>
+          <div class="validation-content">
+            <div class="validation-main">Error validating path</div>
+            <div class="validation-sub">Please try again or select a different path</div>
+          </div>
+        </div>
+      `;
       validation.className = "validation-message invalid";
       saveBtn.disabled = true;
     }
+  }
+
+  private showValidationError(validation: HTMLElement, errorInfo: ErrorInfo) {
+    validation.innerHTML = `
+      <div class="validation-error">
+        <span class="validation-icon">❌</span>
+        <div class="validation-content">
+          <div class="validation-main">${errorInfo.user_message}</div>
+          <div class="validation-sub">${errorInfo.recovery_suggestion}</div>
+          ${errorInfo.category === ErrorCategory.Permission ? 
+            '<div class="validation-tip">💡 Try running as administrator</div>' : ''}
+        </div>
+      </div>
+    `;
+    validation.className = "validation-message invalid";
   }
 
   private async browseFolder() {
@@ -658,6 +674,46 @@ class ReMakeplaceUpdater {
     if (state === AppState.ERROR) {
       this.statusMessage.classList.add("error");
     }
+  }
+
+  private handleDownloadError(errorInfo: ErrorInfo) {
+    const message = errorInfo.is_retryable 
+      ? `${errorInfo.user_message} Retrying automatically...`
+      : errorInfo.user_message;
+    
+    this.setStatus(AppState.ERROR, message);
+    
+    // Show detailed error in console for debugging
+    console.error("Download error details:", errorInfo);
+    
+    // If it's retryable, don't hide progress section yet
+    if (!errorInfo.is_retryable) {
+      this.progressSection.style.display = "none";
+      this.updateButton.disabled = false;
+    }
+  }
+
+  private handleErrorInfo(errorInfo: ErrorInfo) {
+    this.setStatus(AppState.ERROR, errorInfo.user_message);
+    console.error("Error details:", errorInfo);
+  }
+
+  private handleLegacyError(errorMsg: string) {
+    let userFriendlyMsg = "An error occurred";
+    
+    if (errorMsg.includes("Extraction failed")) {
+      if (errorMsg.includes("zst")) {
+        userFriendlyMsg = "Archive extraction failed. The downloaded file may be corrupted or in an unsupported format. Try clearing cache and downloading again.";
+      } else {
+        userFriendlyMsg = "Failed to extract the update archive. The file may be corrupted.";
+      }
+    } else if (errorMsg.includes("Backup failed")) {
+      userFriendlyMsg = "Failed to backup your data before updating. Check that you have sufficient disk space.";
+    } else if (errorMsg.includes("Failed to restore")) {
+      userFriendlyMsg = "Update completed but failed to restore some user data. Check your installation directory.";
+    }
+    
+    this.setStatus(AppState.ERROR, `${userFriendlyMsg} (${errorMsg})`);
   }
 
   private showConfirmation(title: string, message: string): Promise<boolean> {

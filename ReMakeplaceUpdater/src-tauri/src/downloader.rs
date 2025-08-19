@@ -4,6 +4,9 @@ use std::fs;
 use std::io::{Write, Read};
 use std::time::Instant;
 use anyhow::{Result, Context};
+use crate::retry_manager::RetryManager;
+use crate::error_handler::{ErrorHandler, ErrorInfo};
+use tokio::time::{timeout, sleep, Duration};
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct ProgressInfo {
@@ -11,6 +14,9 @@ pub struct ProgressInfo {
     pub speed: f64,         // MB/s
     pub downloaded: u64,
     pub total: u64,
+    pub retry_count: u32,
+    pub is_retrying: bool,
+    pub retry_reason: Option<String>,
 }
 
 pub struct Downloader;
@@ -36,6 +42,73 @@ impl Downloader {
     where
         F: Fn(ProgressInfo) + Send + 'static,
     {
+        let retry_manager = RetryManager::for_network_operations();
+
+        let mut attempt: u32 = 0;
+        let mut last_error: Option<anyhow::Error> = None;
+
+        loop {
+            let resume_this_attempt = resume || filepath.exists();
+
+            let result = Self::download_file_internal(
+                url,
+                filepath,
+                resume_this_attempt,
+                &progress_callback,
+                attempt,
+            ).await;
+
+            match result {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    last_error = Some(e);
+
+                    if attempt < retry_manager.max_retries {
+                        let should_retry = retry_manager.should_retry(last_error.as_ref().unwrap());
+                        if should_retry {
+                            let reason = last_error.as_ref().unwrap().to_string();
+                            // Notify UI about retry
+                            progress_callback(ProgressInfo {
+                                percentage: 0.0,
+                                speed: 0.0,
+                                downloaded: 0,
+                                total: 0,
+                                retry_count: attempt + 1,
+                                is_retrying: true,
+                                retry_reason: Some(reason),
+                            });
+
+                            let delay = retry_manager.calculate_delay(attempt);
+                            sleep(delay).await;
+                            attempt += 1;
+                            continue;
+                        }
+                    }
+
+                    // If we've exhausted retries or error is not retryable, bubble up a final error
+                    let final_err = last_error.unwrap();
+                    if attempt >= retry_manager.max_retries {
+                        return Err(anyhow::anyhow!(
+                            "Download failed after retries exhausted: {}",
+                            final_err
+                        ));
+                    }
+                    return Err(final_err);
+                }
+            }
+        }
+    }
+
+    async fn download_file_internal<F>(
+        url: &str,
+        filepath: &Path,
+        resume: bool,
+        progress_callback: &F,
+        current_retry_count: u32,
+    ) -> Result<()>
+    where
+        F: Fn(ProgressInfo) + Send + 'static,
+    {
         // Create parent directory if it doesn't exist
         if let Some(parent) = filepath.parent() {
             fs::create_dir_all(parent)
@@ -47,7 +120,15 @@ impl Downloader {
             return Err(anyhow::anyhow!("Insufficient disk space: {}", e));
         }
 
-        let client = reqwest::Client::new();
+        // Build an HTTP client with keep-alive and connection pooling
+        let client = reqwest::Client::builder()
+            .pool_idle_timeout(Duration::from_secs(90))
+            .pool_max_idle_per_host(10)
+            .tcp_keepalive(Duration::from_secs(60))
+            .connect_timeout(Duration::from_secs(30))
+            // Do not set a global request timeout; we enforce per-chunk read timeouts below
+            .build()
+            .context("Failed to build HTTP client")?;
         
         // Check if we should resume download
         let mut start_byte = 0u64;
@@ -82,7 +163,7 @@ impl Downloader {
             }
         }
 
-        let mut request = client.get(url);
+        let mut request = client.get(url).header("Connection", "keep-alive");
         
         // Add Range header for resume only if server supports it
         if start_byte > 0 && supports_range {
@@ -135,8 +216,12 @@ impl Downloader {
         let mut stream = response.bytes_stream();
         use futures_util::StreamExt;
 
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.context("Failed to read download chunk")?;
+        // Per-chunk read timeout (minimum 30s)
+        let read_timeout = Duration::from_secs(30);
+
+        while let Some(next_chunk) = timeout(read_timeout, stream.next()).await
+            .map_err(|_| anyhow::anyhow!("Chunk read timed out"))? {
+            let chunk = next_chunk.context("Failed to read download chunk")?;
             file.write_all(&chunk)
                 .context("Failed to write download chunk")?;
 
@@ -162,6 +247,9 @@ impl Downloader {
                     speed,
                     downloaded,
                     total: total_size,
+                    retry_count: current_retry_count,
+                    is_retrying: false,
+                    retry_reason: None,
                 });
 
                 last_update = Instant::now();
@@ -181,6 +269,9 @@ impl Downloader {
             speed,
             downloaded,
             total: total_size,
+            retry_count: current_retry_count,
+            is_retrying: false,
+            retry_reason: None,
         });
 
         Ok(())

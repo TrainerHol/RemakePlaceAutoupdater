@@ -23,6 +23,9 @@ export interface ProgressInfo {
   speed: number; // MB/s
   downloaded: number;
   total: number;
+  retry_count: number;
+  is_retrying: boolean;
+  retry_reason?: string;
 }
 
 export enum AppState {
@@ -41,4 +44,28 @@ export interface AppStatus {
   state: AppState;
   message: string;
   error?: string;
+}
+
+export interface ErrorInfo {
+  category: ErrorCategory;
+  user_message: string;
+  technical_details: string;
+  recovery_suggestion: string;
+  is_retryable: boolean;
+}
+
+export enum ErrorCategory {
+  Network = "Network",
+  FileSystem = "FileSystem", 
+  Permission = "Permission",
+  Validation = "Validation",
+  Configuration = "Configuration",
+  Archive = "Archive",
+  Unknown = "Unknown",
+}
+
+export interface ValidationResult {
+  is_valid: boolean;
+  error_info?: ErrorInfo;
+  mode_description?: string;
 }
