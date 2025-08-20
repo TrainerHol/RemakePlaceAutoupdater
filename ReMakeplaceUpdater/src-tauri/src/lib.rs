@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tauri::{Emitter};
+use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 
 mod config;
@@ -451,8 +452,30 @@ pub fn run() {
             launch_game,
             browse_folder,
             clear_cache,
-            get_cache_path
+            get_cache_path,
+            open_config_folder,
+            open_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
+    // Config is stored as "config.json" in the current working directory
+    let current_dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let dir_str = current_dir
+        .to_str()
+        .ok_or_else(|| "Invalid directory path".to_string())?;
+
+    app.opener()
+        .open_path(dir_str, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| e.to_string())
 }

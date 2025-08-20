@@ -59,6 +59,54 @@ body {
   flex-direction: column;
 }
 
+/* Footer */
+.footer {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-top: 1px solid #333333;
+  background: linear-gradient(180deg, #232323 0%, #1a1a1a 100%);
+  gap: 12px;
+}
+
+.footer-left,
+.footer-center {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  color: #cccccc;
+}
+
+.footer-left:hover .footer-text,
+.footer-center:hover .footer-text {
+  color: #ffffff;
+}
+
+.footer-text {
+  font-size: 13px;
+}
+
+.icon svg {
+  fill: #cccccc;
+  transition: filter 0.3s ease, transform 0.2s ease, fill 0.3s ease;
+}
+
+.footer-left:hover .icon.book svg {
+  filter: drop-shadow(0 0 8px rgba(255, 140, 66, 0.8));
+  fill: #ff8c42;
+  transform: translateY(-1px);
+}
+
+.footer-center:hover .icon.discord svg {
+  filter: drop-shadow(0 0 8px rgba(114, 137, 218, 0.9));
+  fill: #7289da;
+  transform: translateY(-1px);
+}
+
 /* Installation Path Display */
 .path-display {
   display: flex;
@@ -477,13 +525,13 @@ body {
     gap: 8px;
     padding: 15px 10px;
   }
-  
+
   .btn {
     padding: 8px 16px;
     font-size: 13px;
     min-width: 100px;
   }
-  
+
   .btn-small {
     padding: 6px 12px;
     font-size: 11px;

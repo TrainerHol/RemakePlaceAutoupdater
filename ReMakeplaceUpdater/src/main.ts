@@ -79,7 +79,23 @@ class ReMakeplaceUpdater {
           <div class="section button-section">
             <button id="update-btn" class="btn btn-primary" disabled>Check for Updates</button>
             <button id="launch-btn" class="btn btn-secondary">Launch ReMakeplace</button>
-            <button id="clear-cache-btn" class="btn btn-small">Clear Cache</button>
+            <button id="clear-cache-btn" class="btn btn-small" title="Cleans up leftover downloaded update files.">Clear Cache</button>
+          </div>
+        </div>
+
+        <!-- Footer Section -->
+        <div class="footer">
+          <div class="footer-left" id="readme-link" title="Please read the README before asking questions.">
+            <span class="icon book" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256"><path d="M210.78,39.25l-130.25-23A16,16,0,0,0,62,29.23l-29.75,169a16,16,0,0,0,13,18.53l130.25,23h0a16,16,0,0,0,18.54-13l29.75-169A16,16,0,0,0,210.78,39.25ZM178.26,224h0L48,201,77.75,32,208,55ZM89.34,58.42a8,8,0,0,1,9.27-6.48l83,14.65a8,8,0,0,1-1.39,15.88,8.36,8.36,0,0,1-1.4-.12l-83-14.66A8,8,0,0,1,89.34,58.42ZM83.8,89.94a8,8,0,0,1,9.27-6.49l83,14.66A8,8,0,0,1,174.67,114a7.55,7.55,0,0,1-1.41-.13l-83-14.65A8,8,0,0,1,83.8,89.94Zm-5.55,31.51A8,8,0,0,1,87.52,115L129,122.29a8,8,0,0,1-1.38,15.88,8.27,8.27,0,0,1-1.4-.12l-41.5-7.33A8,8,0,0,1,78.25,121.45Z"></path></svg>
+            </span>
+            <span class="footer-text">Please read the README before asking questions.</span>
+          </div>
+          <div class="footer-center" id="discord-link" title="Join the Discord">
+            <span class="icon discord" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256"><path d="M104,140a12,12,0,1,1-12-12A12,12,0,0,1,104,140Zm60-12a12,12,0,1,0,12,12A12,12,0,0,0,164,128Zm74.45,64.9-67,29.71a16.17,16.17,0,0,1-21.71-9.1l-8.11-22q-6.72.45-13.63.46t-13.63-.46l-8.11,22a16.18,16.18,0,0,1-21.71,9.1l-67-29.71a15.93,15.93,0,0,1-9.06-18.51L38,58A16.07,16.07,0,0,1,51,46.14l36.06-5.93a16.22,16.22,0,0,1,18.26,11.88l3.26,12.84Q118.11,64,128,64t19.4.93l3.26-12.84a16.21,16.21,0,0,1,18.26-11.88L205,46.14A16.07,16.07,0,0,1,218,58l29.53,116.38A15.93,15.93,0,0,1,238.45,192.9ZM232,178.28,202.47,62s0,0-.08,0L166.33,56a.17.17,0,0,0-.17,0l-2.83,11.14c5,.94,10,2.06,14.83,3.42A8,8,0,0,1,176,86.31a8.09,8.09,0,0,1-2.16-.3A172.25,172.25,0,0,0,128,80a172.25,172.25,0,0,0-45.84,6,8,8,0,1,1-4.32-15.4c4.82-1.36,9.78-2.48,14.82-3.42L89.83,56s0,0-.12,0h0L53.61,61.93a.17.17,0,0,0-.09,0L24,178.33,91,208a.23.23,0,0,0,.22,0L98,189.72a173.2,173.2,0,0,1-20.14-4.32A8,8,0,0,1,82.16,170,171.85,171.85,0,0,0,128,176a171.85,171.85,0,0,0,45.84-6,8,8,0,0,1,4.32,15.41A173.2,173.2,0,0,1,158,189.72L164.75,208a.22.22,0,0,0,.21,0Z"></path></svg>
+            </span>
+            <span class="footer-text">Join the Discord</span>
           </div>
         </div>
 
@@ -104,6 +120,9 @@ class ReMakeplaceUpdater {
                   Set current version to latest
                 </label>
                 <div class="help-text" title="If your installation shows version 0.0.0 but is actually up to date, check this to sync with the latest version without reinstalling.">ⓘ For existing installations showing incorrect version</div>
+              </div>
+              <div class="form-group">
+                <button id="open-config-btn" class="btn btn-small" title="Open the folder where config.json is stored">Open config folder</button>
               </div>
             </div>
             <div class="modal-footer">
@@ -143,30 +162,63 @@ class ReMakeplaceUpdater {
     this.settingsButton = document.getElementById("settings-btn") as HTMLButtonElement;
     this.clearCacheButton = document.getElementById("clear-cache-btn") as HTMLButtonElement;
     this.progressSection = document.getElementById("progress-section")!;
+    // Footer and settings helpers
+    const readmeLink = document.getElementById("readme-link") as HTMLElement | null;
+    const discordLink = document.getElementById("discord-link") as HTMLElement | null;
+    const openConfigBtn = document.getElementById("open-config-btn") as HTMLButtonElement | null;
+
+    if (readmeLink) {
+      readmeLink.addEventListener("click", async () => {
+        try {
+          await invoke("open_url", { url: "https://github.com/TrainerHol/RemakePlaceAutoupdater#remakeplace-auto-updater-" });
+        } catch (e) {
+          console.error("Failed to open README:", e);
+        }
+      });
+    }
+
+    if (discordLink) {
+      discordLink.addEventListener("click", async () => {
+        try {
+          await invoke("open_url", { url: "https://discord.gg/ARgaVt6crE" });
+        } catch (e) {
+          console.error("Failed to open Discord:", e);
+        }
+      });
+    }
+
+    if (openConfigBtn) {
+      openConfigBtn.addEventListener("click", async () => {
+        try {
+          await invoke("open_config_folder");
+        } catch (e) {
+          console.error("Failed to open config folder:", e);
+        }
+      });
+    }
   }
 
   private setupEventListeners() {
-    // Version override checkbox listener
+    // Version override checkbox listener (always available when visible)
     const versionOverrideCheckbox = document.getElementById("version-override") as HTMLInputElement;
     if (versionOverrideCheckbox) {
       versionOverrideCheckbox.addEventListener("change", async () => {
-        if (versionOverrideCheckbox.checked) {
-          try {
-            this.config = await invoke<Config>("set_version_to_latest", { config: this.config });
-            this.updateUI();
-            
-            // Close the modal and refresh the main UI
-            const modal = document.getElementById("settings-modal")!;
-            modal.style.display = "none";
-            
-            // Reload configuration to update UI state properly
-            await this.loadConfiguration();
-            
-            this.setStatus(AppState.UP_TO_DATE, "Version synced to latest");
-          } catch (error) {
-            this.setStatus(AppState.ERROR, `Failed to update version: ${error}`);
-            versionOverrideCheckbox.checked = false;
-          }
+        if (!versionOverrideCheckbox.checked) return;
+        try {
+          this.config = await invoke<Config>("set_version_to_latest", { config: this.config });
+          this.updateUI();
+
+          // Close the modal and refresh the main UI
+          const modal = document.getElementById("settings-modal")!;
+          modal.style.display = "none";
+
+          // Reload configuration to update UI state properly
+          await this.loadConfiguration();
+
+          this.setStatus(AppState.UP_TO_DATE, "Version synced to latest");
+        } catch (error) {
+          this.setStatus(AppState.ERROR, `Failed to update version: ${error}`);
+          versionOverrideCheckbox.checked = false;
         }
       });
     }
@@ -205,8 +257,7 @@ class ReMakeplaceUpdater {
 
     // UI event listeners
     this.updateButton.addEventListener("click", () => {
-      if (this.currentStatus.state === AppState.UPDATE_AVAILABLE || 
-          this.currentStatus.state === AppState.FRESH_INSTALL_READY) {
+      if (this.currentStatus.state === AppState.UPDATE_AVAILABLE || this.currentStatus.state === AppState.FRESH_INSTALL_READY) {
         this.startUpdate();
       } else {
         this.checkForUpdates();
@@ -271,9 +322,9 @@ class ReMakeplaceUpdater {
           path: this.config.installation_path,
           exeName: this.config.exe_path,
         });
-        
+
         this.config.installation_mode = mode;
-        
+
         if (mode === "fresh_install") {
           this.setStatus(AppState.FRESH_INSTALL_READY, "Ready for fresh installation");
           this.updateButton.textContent = "Install ReMakeplace";
@@ -288,7 +339,6 @@ class ReMakeplaceUpdater {
       this.setStatus(AppState.ERROR, "Failed to load configuration");
     }
   }
-
 
   private updateUI() {
     if (!this.config) return;
@@ -346,16 +396,13 @@ class ReMakeplaceUpdater {
 
     // Check if this is a fresh install or update
     const isFreshInstall = this.config.installation_mode === "fresh_install";
-    
+
     if (!isFreshInstall && !this.updateInfo.is_available) return;
 
     // Show confirmation dialog for fresh installs
     if (isFreshInstall) {
-      const confirmed = await this.showConfirmation(
-        "Confirm Fresh Installation",
-        `This will install ReMakeplace ${this.updateInfo.latest_version} to:\n\n${this.config.installation_path}\n\nDo you want to proceed?`
-      );
-      
+      const confirmed = await this.showConfirmation("Confirm Fresh Installation", `This will install ReMakeplace ${this.updateInfo.latest_version} to:\n\n${this.config.installation_path}\n\nDo you want to proceed?`);
+
       if (!confirmed) {
         return;
       }
@@ -387,7 +434,7 @@ class ReMakeplaceUpdater {
 
     const speedText = progress.speed > 0 ? `${progress.speed.toFixed(1)} MB/s` : "0.0 MB/s";
     let statusText = `${progress.percentage.toFixed(1)}% - ${speedText}`;
-    
+
     // Show retry information if applicable
     if (progress.is_retrying && progress.retry_count > 0) {
       statusText += ` (Retry ${progress.retry_count})`;
@@ -395,13 +442,11 @@ class ReMakeplaceUpdater {
         statusText += ` - ${progress.retry_reason}`;
       }
     }
-    
+
     this.progressText.textContent = statusText;
 
-    const downloadMsg = progress.is_retrying 
-      ? `Retrying download... ${progress.percentage.toFixed(1)}%`
-      : `Downloading update... ${progress.percentage.toFixed(1)}%`;
-    
+    const downloadMsg = progress.is_retrying ? `Retrying download... ${progress.percentage.toFixed(1)}%` : `Downloading update... ${progress.percentage.toFixed(1)}%`;
+
     this.setStatus(AppState.DOWNLOADING, downloadMsg);
   }
 
@@ -409,15 +454,13 @@ class ReMakeplaceUpdater {
     if (!this.config || !this.updateInfo) return;
 
     const isFreshInstall = this.config.installation_mode === "fresh_install";
-    const statusMessage = isFreshInstall 
-      ? "Download complete, starting fresh installation..." 
-      : "Download complete, starting installation...";
-    
+    const statusMessage = isFreshInstall ? "Download complete, starting fresh installation..." : "Download complete, starting installation...";
+
     this.setStatus(AppState.INSTALLING, statusMessage);
 
     try {
       const filename = this.updateInfo.download_url.split("/").pop() || "update.7z";
-      
+
       // Get the cache path from the backend to ensure consistency
       const cachePath = await invoke<string>("get_cache_path", {
         version: this.updateInfo.latest_version,
@@ -436,10 +479,8 @@ class ReMakeplaceUpdater {
 
   private async onUpdateComplete() {
     const wasFreshInstall = this.config?.installation_mode === "fresh_install";
-    const successMessage = wasFreshInstall 
-      ? "Fresh installation completed successfully!" 
-      : "Update completed successfully!";
-    
+    const successMessage = wasFreshInstall ? "Fresh installation completed successfully!" : "Update completed successfully!";
+
     this.setStatus(AppState.UP_TO_DATE, successMessage);
     this.progressSection.style.display = "none";
 
@@ -491,16 +532,15 @@ class ReMakeplaceUpdater {
     }
 
     pathInput.value = this.config?.installation_path || "";
-    
-    // Show version override option for existing installations with version 0.0.0
-    if (this.config && this.config.current_version === "0.0.0" && 
-        this.config.installation_path && this.config.installation_mode === "update") {
+
+    // Show version override option for existing installations (not fresh install)
+    if (this.config && this.config.installation_path && this.config.installation_mode === "update") {
       versionOverrideGroup.style.display = "block";
       versionOverrideCheckbox.checked = false;
     } else {
       versionOverrideGroup.style.display = "none";
     }
-    
+
     modal.style.display = "flex";
 
     if (this.config?.installation_path) {
@@ -585,8 +625,7 @@ class ReMakeplaceUpdater {
         <div class="validation-content">
           <div class="validation-main">${errorInfo.user_message}</div>
           <div class="validation-sub">${errorInfo.recovery_suggestion}</div>
-          ${errorInfo.category === ErrorCategory.Permission ? 
-            '<div class="validation-tip">💡 Try running as administrator</div>' : ''}
+          ${errorInfo.category === ErrorCategory.Permission ? '<div class="validation-tip">💡 Try running as administrator</div>' : ""}
         </div>
       </div>
     `;
@@ -615,22 +654,19 @@ class ReMakeplaceUpdater {
         path: path,
         exeName: this.config.exe_path,
       });
-      
+
       // Check if user is switching from an existing installation to a fresh install location
       const wasExistingInstall = this.config.installation_path && this.config.installation_mode === "update";
       const willBeFreshInstall = mode === "fresh_install";
-      
+
       if (wasExistingInstall && willBeFreshInstall) {
-        const confirmed = await this.showConfirmation(
-          "Fresh Installation",
-          `The selected folder doesn't contain an existing ReMakeplace installation.\n\nDo you want to perform a fresh installation at:\n${path}`
-        );
-        
+        const confirmed = await this.showConfirmation("Fresh Installation", `The selected folder doesn't contain an existing ReMakeplace installation.\n\nDo you want to perform a fresh installation at:\n${path}`);
+
         if (!confirmed) {
           return;
         }
       }
-      
+
       this.config.installation_path = path;
       this.config.installation_mode = mode;
       await invoke("save_config", { config: this.config });
@@ -653,9 +689,9 @@ class ReMakeplaceUpdater {
     try {
       this.clearCacheButton.disabled = true;
       this.setStatus(AppState.IDLE, "Clearing cache...");
-      
+
       await invoke("clear_cache");
-      
+
       this.setStatus(AppState.IDLE, "Cache cleared successfully");
       this.clearCacheButton.disabled = false;
     } catch (error) {
@@ -677,15 +713,13 @@ class ReMakeplaceUpdater {
   }
 
   private handleDownloadError(errorInfo: ErrorInfo) {
-    const message = errorInfo.is_retryable 
-      ? `${errorInfo.user_message} Retrying automatically...`
-      : errorInfo.user_message;
-    
+    const message = errorInfo.is_retryable ? `${errorInfo.user_message} Retrying automatically...` : errorInfo.user_message;
+
     this.setStatus(AppState.ERROR, message);
-    
+
     // Show detailed error in console for debugging
     console.error("Download error details:", errorInfo);
-    
+
     // If it's retryable, don't hide progress section yet
     if (!errorInfo.is_retryable) {
       this.progressSection.style.display = "none";
@@ -700,7 +734,7 @@ class ReMakeplaceUpdater {
 
   private handleLegacyError(errorMsg: string) {
     let userFriendlyMsg = "An error occurred";
-    
+
     if (errorMsg.includes("Extraction failed")) {
       if (errorMsg.includes("zst")) {
         userFriendlyMsg = "Archive extraction failed. The downloaded file may be corrupted or in an unsupported format. Try clearing cache and downloading again.";
@@ -712,7 +746,7 @@ class ReMakeplaceUpdater {
     } else if (errorMsg.includes("Failed to restore")) {
       userFriendlyMsg = "Update completed but failed to restore some user data. Check your installation directory.";
     }
-    
+
     this.setStatus(AppState.ERROR, `${userFriendlyMsg} (${errorMsg})`);
   }
 
