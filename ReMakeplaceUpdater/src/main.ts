@@ -41,12 +41,6 @@ class ReMakeplaceUpdater {
           <h1>ReMakeplace Launcher</h1>
         </div>
 
-        <!-- MOTD Banner -->
-        <div id="motd-banner" class="motd-banner" style="display: none;">
-          <span id="motd-text"></span>
-          <button id="motd-dismiss" class="motd-dismiss" title="Dismiss">×</button>
-        </div>
-
         <!-- Content Wrapper -->
         <div class="content-wrapper">
           <!-- Installation Path Section -->
@@ -106,6 +100,9 @@ class ReMakeplaceUpdater {
             <span class="footer-text">Join the Discord</span>
           </div>
         </div>
+
+        <!-- MOTD Line (below footer) -->
+        <div id="motd-line" class="motd-line" style="display: none;"></div>
 
         <!-- Settings Modal (hidden by default) -->
         <div id="settings-modal" class="modal" style="display: none;">
@@ -352,13 +349,14 @@ class ReMakeplaceUpdater {
   private async loadMetadata() {
     try {
       // Prefer GitHub raw metadata first
-      const githubUrl = "https://raw.githubusercontent.com/TrainerHol/RemakePlaceAutoupdater/refs/heads/main/metadata.json";
+      const ts = Date.now();
+      const githubUrl = `https://raw.githubusercontent.com/TrainerHol/RemakePlaceAutoupdater/refs/heads/main/metadata.json?cb=${ts}`;
       const gh = await fetch(githubUrl, { cache: "no-store" }).catch(() => null);
       if (gh && gh.ok) {
         this.metadata = await gh.json();
       } else {
         // Fallback to locally bundled metadata
-        const local = await fetch("/metadata.json", { cache: "no-store" }).catch(() => null);
+        const local = await fetch(`/metadata.json?cb=${ts}`, { cache: "no-store" }).catch(() => null);
         if (local && local.ok) {
           this.metadata = await local.json();
         }
@@ -376,25 +374,14 @@ class ReMakeplaceUpdater {
 
   private renderMotd() {
     const motd = (this.metadata?.motd || "").trim();
-    const banner = document.getElementById("motd-banner");
-    const textEl = document.getElementById("motd-text");
-    const dismissBtn = document.getElementById("motd-dismiss");
+    const motdLine = document.getElementById("motd-line") as HTMLElement | null;
+    if (!motdLine) return;
 
-    if (!banner || !textEl || !dismissBtn) return;
-
-    // Restore dismissed state per-session via localStorage
-    const dismissedKey = "motdDismissed";
-    const isDismissed = localStorage.getItem(dismissedKey) === "1";
-
-    if (motd && !isDismissed) {
-      textEl.textContent = motd;
-      banner.style.display = "flex";
-      dismissBtn.onclick = () => {
-        banner.style.display = "none";
-        localStorage.setItem(dismissedKey, "1");
-      };
+    if (motd) {
+      motdLine.textContent = motd;
+      motdLine.style.display = "block";
     } else {
-      banner.style.display = "none";
+      motdLine.style.display = "none";
     }
   }
 

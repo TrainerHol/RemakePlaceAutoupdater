@@ -39,44 +39,18 @@ body {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* MOTD Banner */
-.motd-banner {
+/* MOTD Line */
+.motd-line {
   display: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  margin: 0 20px 12px 20px;
-  border-radius: 10px;
+  padding: 10px 16px;
+  margin: 0 16px 16px 16px;
+  border-radius: 8px;
   border: 1px solid #e6732a;
-  background: linear-gradient(135deg, rgba(255, 140, 66, 0.15) 0%, rgba(230, 115, 42, 0.15) 100%);
+  background: linear-gradient(135deg, rgba(255, 140, 66, 0.12) 0%, rgba(230, 115, 42, 0.12) 100%);
   color: #ffd6bf;
-  box-shadow: 0 0 12px rgba(255, 140, 66, 0.35), 0 0 24px rgba(255, 140, 66, 0.15);
-}
-
-.motd-banner #motd-text {
+  box-shadow: 0 0 10px rgba(255, 140, 66, 0.28), 0 0 18px rgba(255, 140, 66, 0.12);
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.motd-dismiss {
-  background: transparent;
-  color: #ffffff;
-  border: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 28px;
   text-align: center;
-  transition: all 0.2s ease;
-  box-shadow: 0 0 8px rgba(255, 140, 66, 0.3);
-}
-
-.motd-dismiss:hover {
-  background: rgba(255, 140, 66, 0.25);
-  transform: translateY(-1px);
 }
 
 /* Sections */
