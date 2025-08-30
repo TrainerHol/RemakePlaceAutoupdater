@@ -39,46 +39,6 @@ body {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* MOTD Banner */
-.motd-banner {
-  display: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  margin: 0 20px 12px 20px;
-  border-radius: 10px;
-  border: 1px solid #e6732a;
-  background: linear-gradient(135deg, rgba(255, 140, 66, 0.15) 0%, rgba(230, 115, 42, 0.15) 100%);
-  color: #ffd6bf;
-  box-shadow: 0 0 12px rgba(255, 140, 66, 0.35), 0 0 24px rgba(255, 140, 66, 0.15);
-}
-
-.motd-banner #motd-text {
-  font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.motd-dismiss {
-  background: transparent;
-  color: #ffffff;
-  border: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 28px;
-  text-align: center;
-  transition: all 0.2s ease;
-  box-shadow: 0 0 8px rgba(255, 140, 66, 0.3);
-}
-
-.motd-dismiss:hover {
-  background: rgba(255, 140, 66, 0.25);
-  transform: translateY(-1px);
-}
-
 /* Sections */
 .section {
   padding: 20px;
@@ -571,22 +531,86 @@ body {
     font-size: 13px;
     min-width: 100px;
   }
+}
 
-  .btn-small {
-    padding: 6px 12px;
-    font-size: 11px;
-    min-width: 70px;
-  }
+/* MOTD Banner */
+.motd-banner {
+  background: linear-gradient(135deg, #ff8c42 0%, #e6732a 100%);
+  border: 1px solid #ff8c42;
+  border-radius: 8px;
+  margin: 15px 20px;
+  padding: 0;
+  box-shadow: 0 4px 12px rgba(255, 140, 66, 0.3), 0 0 20px rgba(255, 140, 66, 0.2);
+  animation: motdGlow 2s ease-in-out infinite alternate;
+  position: relative;
+  overflow: hidden;
+}
 
-  .path-display {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
+.motd-banner::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #ff8c42, #e6732a, #ff8c42);
+  border-radius: 10px;
+  z-index: -1;
+  opacity: 0.7;
+  filter: blur(4px);
+}
 
-  .path-label {
-    min-width: auto;
+.motd-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #ff8c42 0%, #e6732a 100%);
+  border-radius: 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.motd-text {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 16px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  flex: 1;
+  margin-right: 15px;
+  line-height: 1.4;
+}
+
+.motd-dismiss {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #ffffff;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.motd-dismiss:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+@keyframes motdGlow {
+  0% {
+    box-shadow: 0 4px 12px rgba(255, 140, 66, 0.3), 0 0 20px rgba(255, 140, 66, 0.2);
   }
+  100% {
+    box-shadow: 0 4px 16px rgba(255, 140, 66, 0.4), 0 0 25px rgba(255, 140, 66, 0.3);
+  }
+}
 
   .modal-content {
     min-width: 90%;

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode, ErrorInfo } from "./types";
+import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode, ErrorInfo, Metadata } from "./types";
 import { AppState, ErrorCategory } from "./types";
 
 class ReMakeplaceUpdater {
@@ -11,6 +11,7 @@ class ReMakeplaceUpdater {
     message: "Initializing...",
   };
   private isFirstRun = false;
+  private metadata: Metadata | null = null;
 
   // UI Elements
   private statusMessage!: HTMLElement;
@@ -29,6 +30,7 @@ class ReMakeplaceUpdater {
     this.initializeUI();
     this.setupEventListeners();
     this.loadConfiguration();
+    this.loadMetadata();
   }
 
   private initializeUI() {
@@ -37,6 +39,12 @@ class ReMakeplaceUpdater {
         <!-- Header Section -->
         <div class="header">
           <h1>ReMakeplace Launcher</h1>
+        </div>
+
+        <!-- MOTD Banner -->
+        <div id="motd-banner" class="motd-banner" style="display: none;">
+          <span id="motd-text"></span>
+          <button id="motd-dismiss" class="motd-dismiss" title="Dismiss">×</button>
         </div>
 
         <!-- Content Wrapper -->
@@ -180,7 +188,8 @@ class ReMakeplaceUpdater {
     if (discordLink) {
       discordLink.addEventListener("click", async () => {
         try {
-          await invoke("open_url", { url: "https://discord.gg/ARgaVt6crE" });
+          const url = this.getDiscordInvite();
+          await invoke("open_url", { url });
         } catch (e) {
           console.error("Failed to open Discord:", e);
         }
@@ -337,6 +346,55 @@ class ReMakeplaceUpdater {
     } catch (error) {
       console.error("Failed to load configuration:", error);
       this.setStatus(AppState.ERROR, "Failed to load configuration");
+    }
+  }
+
+  private async loadMetadata() {
+    try {
+      // Prefer GitHub raw metadata first
+      const githubUrl = "https://raw.githubusercontent.com/TrainerHol/RemakePlaceAutoupdater/refs/heads/main/metadata.json";
+      const gh = await fetch(githubUrl, { cache: "no-store" }).catch(() => null);
+      if (gh && gh.ok) {
+        this.metadata = await gh.json();
+      } else {
+        // Fallback to locally bundled metadata
+        const local = await fetch("/metadata.json", { cache: "no-store" }).catch(() => null);
+        if (local && local.ok) {
+          this.metadata = await local.json();
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load metadata.json", e);
+    } finally {
+      this.renderMotd();
+    }
+  }
+
+  private getDiscordInvite(): string {
+    return this.metadata?.discordInvite?.trim() || "https://discord.gg/f2VAqXKWUw";
+  }
+
+  private renderMotd() {
+    const motd = (this.metadata?.motd || "").trim();
+    const banner = document.getElementById("motd-banner");
+    const textEl = document.getElementById("motd-text");
+    const dismissBtn = document.getElementById("motd-dismiss");
+
+    if (!banner || !textEl || !dismissBtn) return;
+
+    // Restore dismissed state per-session via localStorage
+    const dismissedKey = "motdDismissed";
+    const isDismissed = localStorage.getItem(dismissedKey) === "1";
+
+    if (motd && !isDismissed) {
+      textEl.textContent = motd;
+      banner.style.display = "flex";
+      dismissBtn.onclick = () => {
+        banner.style.display = "none";
+        localStorage.setItem(dismissedKey, "1");
+      };
+    } else {
+      banner.style.display = "none";
     }
   }
 

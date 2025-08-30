@@ -56,7 +56,7 @@ export interface ErrorInfo {
 
 export enum ErrorCategory {
   Network = "Network",
-  FileSystem = "FileSystem", 
+  FileSystem = "FileSystem",
   Permission = "Permission",
   Validation = "Validation",
   Configuration = "Configuration",
@@ -68,4 +68,9 @@ export interface ValidationResult {
   is_valid: boolean;
   error_info?: ErrorInfo;
   mode_description?: string;
+}
+
+export interface Metadata {
+  discordInvite?: string;
+  motd?: string;
 }

@@ -138,7 +138,7 @@ npm run tauri build
 
 ### Need More Help?
 
-Visit our [GitHub Issues](https://github.com/TrainerHol/RemakePlaceAutoupdater/issues) page or ask in the ReMakeplace [discord community](https://discord.gg/ARgaVt6crE)!
+Visit our [GitHub Issues](https://github.com/TrainerHol/RemakePlaceAutoupdater/issues) page or ask in the ReMakeplace [discord community](https://discord.gg/f2VAqXKWUw)!
 
 ## Advanced Configuration ⚙️
 
