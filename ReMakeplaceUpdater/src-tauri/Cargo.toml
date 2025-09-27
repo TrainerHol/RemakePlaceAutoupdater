@@ -45,9 +45,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 futures-util = "0.3"
 rand = "0.8"
-[[bin]]
-name = "downloader_test"
-path = "src/bin/downloader_test.rs"
+## Local testing bin removed; main app binary is the default target for Tauri builds
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
