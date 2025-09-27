@@ -8,7 +8,7 @@ use anyhow::Context;
 
 mod config;
 mod updater;
-mod downloader;
+pub mod downloader;
 mod extractor;
 mod launcher;
 mod retry_manager;

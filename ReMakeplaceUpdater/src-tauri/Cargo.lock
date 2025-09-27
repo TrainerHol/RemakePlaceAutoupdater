@@ -3593,7 +3593,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "remakeplaceupdater"
-version = "1.2.6"
+version = "1.2.8"
 dependencies = [
  "anyhow",
  "bzip2 0.4.4",
@@ -3602,6 +3602,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "libc",
+ "rand 0.8.5",
  "reqwest 0.11.27",
  "semver",
  "serde",

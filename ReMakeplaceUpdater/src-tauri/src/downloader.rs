@@ -7,6 +7,7 @@ use anyhow::{Result, Context};
 use crate::retry_manager::RetryManager;
 use crate::error_handler::{ErrorHandler, ErrorInfo};
 use tokio::time::{timeout, sleep, Duration};
+use rand::random;
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct ProgressInfo {
@@ -44,6 +45,16 @@ impl Downloader {
     {
         let retry_manager = RetryManager::for_network_operations();
 
+        // Reuse a single HTTP client across attempts with a browser-like UA
+        let client = reqwest::Client::builder()
+            .pool_idle_timeout(Duration::from_secs(90))
+            .pool_max_idle_per_host(10)
+            .tcp_keepalive(Duration::from_secs(60))
+            .connect_timeout(Duration::from_secs(30))
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .build()
+            .context("Failed to build HTTP client")?;
+
         let mut attempt: u32 = 0;
         let mut last_error: Option<anyhow::Error> = None;
 
@@ -51,6 +62,7 @@ impl Downloader {
             let resume_this_attempt = resume || filepath.exists();
 
             let result = Self::download_file_internal(
+                &client,
                 url,
                 filepath,
                 resume_this_attempt,
@@ -78,7 +90,7 @@ impl Downloader {
                                 retry_reason: Some(reason),
                             });
 
-                            let delay = retry_manager.calculate_delay(attempt);
+                            let delay = retry_manager.calculate_delay_with_jitter(attempt);
                             sleep(delay).await;
                             attempt += 1;
                             continue;
@@ -100,6 +112,7 @@ impl Downloader {
     }
 
     async fn download_file_internal<F>(
+        client: &reqwest::Client,
         url: &str,
         filepath: &Path,
         resume: bool,
@@ -120,16 +133,6 @@ impl Downloader {
             return Err(anyhow::anyhow!("Insufficient disk space: {}", e));
         }
 
-        // Build an HTTP client with keep-alive and connection pooling
-        let client = reqwest::Client::builder()
-            .pool_idle_timeout(Duration::from_secs(90))
-            .pool_max_idle_per_host(10)
-            .tcp_keepalive(Duration::from_secs(60))
-            .connect_timeout(Duration::from_secs(30))
-            // Do not set a global request timeout; we enforce per-chunk read timeouts below
-            .build()
-            .context("Failed to build HTTP client")?;
-        
         // Check if we should resume download
         let mut start_byte = 0u64;
         let mut supports_range = true;
@@ -163,21 +166,36 @@ impl Downloader {
             }
         }
 
-        let mut request = client.get(url).header("Connection", "keep-alive");
-        
-        // Add Range header for resume only if server supports it
-        if start_byte > 0 && supports_range {
-            request = request.header("Range", format!("bytes={}-", start_byte));
-        }
+        // Prepare and send request, ensuring proper 206 handling on resume
+        let response = loop {
+            let mut request = client.get(url).header("Connection", "keep-alive");
+            if start_byte > 0 && supports_range {
+                request = request.header("Range", format!("bytes={}-", start_byte));
+            }
+            let resp = request
+                .send()
+                .await
+                .context("Failed to start download")?;
 
-        let response = request
-            .send()
-            .await
-            .context("Failed to start download")?;
+            let status = resp.status();
 
-        if !response.status().is_success() && response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-            return Err(anyhow::anyhow!("Download failed with status: {}", response.status()));
-        }
+            // If resuming, require 206; if 200 or 416, restart from scratch
+            if start_byte > 0 && supports_range {
+                if status == reqwest::StatusCode::OK || status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+                    let _ = fs::remove_file(filepath);
+                    start_byte = 0;
+                    supports_range = false;
+                    continue;
+                }
+                if status != reqwest::StatusCode::PARTIAL_CONTENT && !status.is_success() {
+                    return Err(anyhow::anyhow!("Download failed with status: {}", status));
+                }
+            } else if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+                return Err(anyhow::anyhow!("Download failed with status: {}", status));
+            }
+
+            break resp;
+        };
 
         let total_size = if let Some(content_length) = response.content_length() {
             content_length + start_byte
@@ -213,6 +231,20 @@ impl Downloader {
         let start_time = Instant::now();
         let mut last_update = Instant::now();
 
+        // Optional per-process throttling for testing: set DOWNLOADER_MAX_BPS to cap speed (bytes/sec)
+        let max_bps: Option<u64> = std::env::var("DOWNLOADER_MAX_BPS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|&v| v > 0);
+        let throttle_start = Instant::now();
+        let mut throttle_bytes: u64 = 0;
+
+        // Optional per-process failure injection for testing unstable connections
+        let fail_pct: u8 = std::env::var("DOWNLOADER_FAIL_PCT")
+            .ok()
+            .and_then(|v| v.parse::<u8>().ok())
+            .unwrap_or(0);
+
         let mut stream = response.bytes_stream();
         use futures_util::StreamExt;
 
@@ -226,6 +258,28 @@ impl Downloader {
                 .context("Failed to write download chunk")?;
 
             downloaded += chunk.len() as u64;
+            throttle_bytes += chunk.len() as u64;
+
+            // Enforce throttle if configured
+            if let Some(max_bps) = max_bps {
+                let expected_elapsed = (throttle_bytes as f64) / (max_bps as f64);
+                let actual_elapsed = throttle_start.elapsed().as_secs_f64();
+                if expected_elapsed > actual_elapsed {
+                    let sleep_secs = expected_elapsed - actual_elapsed;
+                    let sleep_ms = (sleep_secs * 1000.0) as u64;
+                    if sleep_ms > 0 {
+                        sleep(Duration::from_millis(sleep_ms)).await;
+                    }
+                }
+            }
+
+            // Inject simulated connection resets to test retry/resume
+            if fail_pct > 0 {
+                let roll: u8 = random::<u8>() % 100;
+                if roll < fail_pct {
+                    return Err(anyhow::anyhow!("Connection reset by peer (simulated)"));
+                }
+            }
 
             // Update progress every 100ms
             if last_update.elapsed().as_millis() >= 100 {
@@ -254,6 +308,15 @@ impl Downloader {
 
                 last_update = Instant::now();
             }
+        }
+
+        // If server provided total size, ensure we actually received it all
+        if total_size > 0 && downloaded < total_size {
+            return Err(anyhow::anyhow!(
+                "Download ended prematurely: received {} of {} bytes",
+                downloaded,
+                total_size
+            ));
         }
 
         // Final progress update

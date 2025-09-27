@@ -1,4 +1,5 @@
 use std::time::Duration;
+use rand::Rng;
 use anyhow::{Error, Result};
 use tokio::time::sleep;
 
@@ -100,7 +101,7 @@ impl RetryManager {
     /// Creates a RetryManager optimized for network operations
     pub fn for_network_operations() -> Self {
         Self {
-            max_retries: 3,
+            max_retries: 5,
             base_delay: Duration::from_millis(1000),
             max_delay: Duration::from_secs(30),
             timeout: Duration::from_secs(30),
@@ -109,10 +110,11 @@ impl RetryManager {
                     ErrorType::NetworkTimeout,
                     ErrorType::ConnectionReset,
                     ErrorType::ChunkReadFailed,
+                    ErrorType::TemporaryFailure,
                 ],
                 backoff_strategy: BackoffStrategy::Exponential {
                     base: 1000,     // 1 second
-                    multiplier: 2.0, // 1s, 2s, 4s
+                    multiplier: 2.0, // 1s, 2s, 4s, 8s, 16s
                 },
             },
         }
@@ -126,41 +128,51 @@ impl RetryManager {
 
     /// Determines if an error should trigger a retry based on the retry policy
     pub fn should_retry(&self, error: &Error) -> bool {
-        let error_str = error.to_string().to_lowercase();
-        
-        for error_type in &self.retry_policy.retry_on {
-            match error_type {
-                ErrorType::NetworkTimeout => {
-                    if error_str.contains("timeout") || error_str.contains("timed out") {
-                        return true;
+        // Inspect the entire error chain for robust matching
+        let mut messages: Vec<String> = Vec::new();
+        for cause in error.chain() {
+            messages.push(cause.to_string().to_lowercase());
+        }
+
+        for msg in &messages {
+            for error_type in &self.retry_policy.retry_on {
+                match error_type {
+                    ErrorType::NetworkTimeout => {
+                        if msg.contains("timeout") || msg.contains("timed out") {
+                            return true;
+                        }
                     }
-                }
-                ErrorType::ConnectionReset => {
-                    if error_str.contains("connection reset") 
-                        || error_str.contains("connection refused")
-                        || error_str.contains("broken pipe") {
-                        return true;
+                    ErrorType::ConnectionReset => {
+                        if msg.contains("connection reset")
+                            || msg.contains("connection refused")
+                            || msg.contains("broken pipe")
+                            || msg.contains("econnreset") {
+                            return true;
+                        }
                     }
-                }
-                ErrorType::ChunkReadFailed => {
-                    if error_str.contains("chunk") 
-                        || error_str.contains("incomplete read")
-                        || error_str.contains("unexpected eof") {
-                        return true;
+                    ErrorType::ChunkReadFailed => {
+                        if msg.contains("chunk")
+                            || msg.contains("incomplete read")
+                            || msg.contains("unexpected eof")
+                            || msg.contains("failed to read download chunk") {
+                            return true;
+                        }
                     }
-                }
-                ErrorType::TemporaryFailure => {
-                    if error_str.contains("temporary") 
-                        || error_str.contains("service unavailable")
-                        || error_str.contains("502")
-                        || error_str.contains("503")
-                        || error_str.contains("504") {
-                        return true;
+                    ErrorType::TemporaryFailure => {
+                        if msg.contains("temporary")
+                            || msg.contains("service unavailable")
+                            || msg.contains("too many requests")
+                            || msg.contains("429")
+                            || msg.contains("502")
+                            || msg.contains("503")
+                            || msg.contains("504") {
+                            return true;
+                        }
                     }
                 }
             }
         }
-        
+
         false
     }
 
@@ -185,6 +197,26 @@ impl RetryManager {
         } else {
             delay
         }
+    }
+
+    /// Calculates a jittered delay to avoid thundering herd
+    pub fn calculate_delay_with_jitter(&self, attempt: u32) -> Duration {
+        let base = self.calculate_delay(attempt);
+        let millis = base.as_millis() as u64;
+        if millis == 0 {
+            return base;
+        }
+        // ±25% jitter
+        let jitter_range = (millis / 4).max(1);
+        let mut rng = rand::thread_rng();
+        let offset: i64 = rng.gen_range(-(jitter_range as i64)..=(jitter_range as i64));
+        let adj = if offset.is_negative() {
+            millis.saturating_sub(offset.wrapping_abs() as u64)
+        } else {
+            millis.saturating_add(offset as u64)
+        };
+        let dur = Duration::from_millis(adj);
+        if dur > self.max_delay { self.max_delay } else { dur }
     }
 
     /// Executes an async operation with retry logic

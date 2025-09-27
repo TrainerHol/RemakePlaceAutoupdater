@@ -68,3 +68,6 @@ test_downloads/
 *.test 
 CLAUDE.md
 /.claude
+ReMakeplaceUpdater/src-tauri/src/bin/downloader_test.rs
+ReMakeplaceUpdater/src-tauri/src/bin/downloader_test.ps1
+ReMakeplaceUpdater/src-tauri/update_cache/

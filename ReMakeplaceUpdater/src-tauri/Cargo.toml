@@ -1,6 +1,6 @@
 [package]
 name = "remakeplaceupdater"
-version = "1.2.8"
+version = "1.2.9"
 description = "Auto updater for ReMakeplace"
 authors = ["Hol"]
 edition = "2021"
@@ -44,6 +44,10 @@ anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 futures-util = "0.3"
+rand = "0.8"
+[[bin]]
+name = "downloader_test"
+path = "src/bin/downloader_test.rs"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
