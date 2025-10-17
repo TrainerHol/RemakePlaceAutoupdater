@@ -5,6 +5,12 @@ use tokio::sync::Mutex;
 use tauri::{Emitter};
 use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
+use tauri_plugin_deep_link;
+use url::Url;
+use base64::{engine::general_purpose, Engine as _};
+mod gallery;
+mod companion;
+use companion::ImportPayload;
 
 mod config;
 mod updater;
@@ -20,6 +26,7 @@ use downloader::{Downloader, ProgressInfo};
 use extractor::Extractor;
 use launcher::Launcher;
 use error_handler::{ErrorHandler, ErrorInfo};
+use gallery::GalleryItemDto;
 
 // Application state to track current operations
 #[derive(Default)]
@@ -436,6 +443,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(Mutex::new(app_state)))
         .invoke_handler(tauri::generate_handler![
@@ -454,10 +462,66 @@ pub fn run() {
             clear_cache,
             get_cache_path,
             open_config_folder,
-            open_url
+            open_url,
+            handle_deep_link,
+            list_gallery
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn handle_deep_link(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    // Parse makeplace://import?payload=...
+    let parsed = Url::parse(&url).map_err(|e| e.to_string())?;
+    if parsed.scheme() != "makeplace" {
+        return Err("Unsupported scheme".to_string());
+    }
+    let host = parsed.host_str().unwrap_or("");
+    if host != "import" {
+        return Err("Unsupported action".to_string());
+    }
+    let payload_q = parsed
+        .query_pairs()
+        .find(|(k, _)| k == "payload")
+        .map(|(_, v)| v.to_string())
+        .ok_or_else(|| "Missing payload".to_string())?;
+    let decoded = general_purpose::STANDARD
+        .decode(percent_decode(&payload_q).as_bytes())
+        .map_err(|e| e.to_string())?;
+    let json_str = String::from_utf8(decoded).map_err(|e| e.to_string())?;
+    let payload: ImportPayload = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+
+    if let Err(e) = gallery::init_db() { return Err(e.to_string()); }
+    let config = match ConfigManager::load_config() { Ok(c) => c, Err(e) => return Err(e.to_string()) };
+
+    match companion::import_design(&config, payload).await {
+        Ok((json_path, _image)) => {
+            let _ = tauri_plugin_notification::Notification::new(&app)
+                .title("MakePlace")
+                .body(format!("Design has been added ({}).", json_path))
+                .show();
+            Ok(())
+        }
+        Err(e) => Err(e.to_string())
+    }
+}
+
+fn percent_decode(s: &str) -> String {
+    match urlencoding::decode(s) {
+        Ok(v) => v.into_owned(),
+        Err(_) => s.to_string(),
+    }
+}
+
+fn url_encode(s: &str) -> String {
+    urlencoding::encode(s).into_owned()
+}
+
+#[tauri::command]
+async fn list_gallery() -> Result<Vec<GalleryItemDto>, String> {
+    gallery::init_db().map_err(|e| e.to_string())?;
+    gallery::list_entries().map_err(|e| e.to_string())
 }
 
 #[tauri::command]

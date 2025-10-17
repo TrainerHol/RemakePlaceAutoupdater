@@ -45,6 +45,11 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 futures-util = "0.3"
 rand = "0.8"
+tauri-plugin-deep-link = "2"
+base64 = "0.21"
+url = "2"
+rusqlite = { version = "0.31", features = ["bundled"] }
+urlencoding = "2"
 ## Local testing bin removed; main app binary is the default target for Tauri builds
 
 [target.'cfg(unix)'.dependencies]

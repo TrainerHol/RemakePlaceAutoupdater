@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode, ErrorInfo, Metadata } from "./types";
 import { AppState, ErrorCategory } from "./types";
 
@@ -31,6 +32,7 @@ class ReMakeplaceUpdater {
     this.setupEventListeners();
     this.loadConfiguration();
     this.loadMetadata();
+    this.setupDeepLinkListener();
   }
 
   private initializeUI() {
@@ -39,10 +41,15 @@ class ReMakeplaceUpdater {
         <!-- Header Section -->
         <div class="header">
           <h1>ReMakeplace Launcher</h1>
+          <div class="tabs">
+            <button id="tab-updates" class="tab active">Updates</button>
+            <button id="tab-gallery" class="tab">Gallery</button>
+          </div>
         </div>
 
         <!-- Content Wrapper -->
         <div class="content-wrapper">
+          <div id="view-updates">
           <!-- Installation Path Section -->
           <div class="section">
             <div class="path-display">
@@ -82,6 +89,12 @@ class ReMakeplaceUpdater {
             <button id="update-btn" class="btn btn-primary" disabled>Check for Updates</button>
             <button id="launch-btn" class="btn btn-secondary">Launch ReMakeplace</button>
             <button id="clear-cache-btn" class="btn btn-small" title="Cleans up leftover downloaded update files.">Clear Cache</button>
+          </div>
+          </div>
+          <div id="view-gallery" style="display:none;">
+            <div class="section">
+              <div id="gallery-grid" class="gallery-grid"></div>
+            </div>
           </div>
         </div>
 
@@ -171,6 +184,10 @@ class ReMakeplaceUpdater {
     const readmeLink = document.getElementById("readme-link") as HTMLElement | null;
     const discordLink = document.getElementById("discord-link") as HTMLElement | null;
     const openConfigBtn = document.getElementById("open-config-btn") as HTMLButtonElement | null;
+    const tabUpdates = document.getElementById("tab-updates") as HTMLButtonElement | null;
+    const tabGallery = document.getElementById("tab-gallery") as HTMLButtonElement | null;
+    const viewUpdates = document.getElementById("view-updates") as HTMLElement | null;
+    const viewGallery = document.getElementById("view-gallery") as HTMLElement | null;
 
     if (readmeLink) {
       readmeLink.addEventListener("click", async () => {
@@ -200,6 +217,22 @@ class ReMakeplaceUpdater {
         } catch (e) {
           console.error("Failed to open config folder:", e);
         }
+      });
+    }
+
+    if (tabUpdates && tabGallery && viewUpdates && viewGallery) {
+      tabUpdates.addEventListener("click", () => {
+        tabUpdates.classList.add("active");
+        tabGallery.classList.remove("active");
+        viewUpdates.style.display = "block";
+        viewGallery.style.display = "none";
+      });
+      tabGallery.addEventListener("click", async () => {
+        tabGallery.classList.add("active");
+        tabUpdates.classList.remove("active");
+        viewUpdates.style.display = "none";
+        viewGallery.style.display = "block";
+        await this.loadGallery();
       });
     }
   }
@@ -368,6 +401,47 @@ class ReMakeplaceUpdater {
     }
   }
 
+  private async loadGallery() {
+    try {
+      const items = await invoke<any>("list_gallery");
+      const grid = document.getElementById("gallery-grid") as HTMLElement | null;
+      if (!grid) return;
+      grid.innerHTML = (items as Array<any>)
+        .map((it) => {
+          const img = it.image_path ? `<img src="${it.image_path}" alt="" class="thumb"/>` : `<div class="thumb placeholder"></div>`;
+          return `
+          <div class="card">
+            <div class="thumb-wrap">${img}</div>
+            <div class="meta">
+              <div class="title">${it.title}</div>
+              <div class="sub">${it.kind} • ${it.author}</div>
+            </div>
+            <div class="actions">
+              <button data-json="${it.json_path}" class="btn btn-small open-folder">Show in Folder</button>
+            </div>
+          </div>
+        `;
+        })
+        .join("");
+
+      // Wire actions
+      grid.querySelectorAll(".open-folder").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const el = e.currentTarget as HTMLElement;
+          const jsonPath = el.getAttribute("data-json");
+          if (!jsonPath) return;
+          try {
+            await invoke("open_url", { url: `file://${jsonPath}` });
+          } catch (err) {
+            console.error("Failed to open path:", err);
+          }
+        });
+      });
+    } catch (e) {
+      console.error("Failed to load gallery:", e);
+    }
+  }
+
   private getDiscordInvite(): string {
     return this.metadata?.discordInvite?.trim() || "https://discord.gg/f2VAqXKWUw";
   }
@@ -400,6 +474,21 @@ class ReMakeplaceUpdater {
     } else {
       this.launchButton.disabled = false;
       this.launchButton.textContent = "Launch ReMakeplace";
+    }
+  }
+
+  private async setupDeepLinkListener() {
+    try {
+      await onOpenUrl(async (urls: string[]) => {
+        const url = urls[0];
+        try {
+          await invoke("handle_deep_link", { url });
+        } catch (e) {
+          console.error("Failed to import from deep link:", e);
+        }
+      });
+    } catch (e) {
+      console.warn("Deep link plugin not available:", e);
     }
   }
 
