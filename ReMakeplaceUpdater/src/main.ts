@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode, ErrorInfo, Metadata } from "./types";
 import { AppState, ErrorCategory } from "./types";
 
@@ -33,6 +34,7 @@ class ReMakeplaceUpdater {
     this.loadConfiguration();
     this.loadMetadata();
     this.setupDeepLinkListener();
+    this.setupSingleInstanceHandler();
   }
 
   private initializeUI() {
@@ -524,6 +526,37 @@ class ReMakeplaceUpdater {
       });
     } catch (e) {
       console.warn("Deep link plugin not available:", e);
+    }
+  }
+
+  private async setupSingleInstanceHandler() {
+    // Bring existing window to front and forward any URL args
+    try {
+      await tauriListen<{ argv: Array<string>; cwd: string }>("single-instance", async (e) => {
+        const { argv } = e.payload;
+        const urlArg = Array.isArray(argv) ? argv.find((a) => typeof a === "string" && a.startsWith("makeplace://")) : undefined;
+        // Always switch to Gallery view
+        const tabUpdates = document.getElementById("tab-updates") as HTMLButtonElement | null;
+        const tabGallery = document.getElementById("tab-gallery") as HTMLButtonElement | null;
+        const viewUpdates = document.getElementById("view-updates") as HTMLElement | null;
+        const viewGallery = document.getElementById("view-gallery") as HTMLElement | null;
+        if (tabGallery && tabUpdates && viewUpdates && viewGallery) {
+          tabGallery.classList.add("active");
+          tabUpdates.classList.remove("active");
+          viewUpdates.style.display = "none";
+          viewGallery.style.display = "block";
+        }
+        if (urlArg) {
+          try {
+            await invoke("handle_deep_link", { url: urlArg });
+            await this.loadGallery();
+          } catch (e) {
+            console.error("Failed handling forwarded deep link:", e);
+          }
+        }
+      });
+    } catch (e) {
+      // optional
     }
   }
 

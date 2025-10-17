@@ -7,6 +7,7 @@ use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 use tauri_plugin_deep_link;
 use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_single_instance::SingleInstanceExt;
 use url::Url;
 use tauri_plugin_notification::NotificationExt;
 use base64::{engine::general_purpose, Engine as _};
@@ -440,12 +441,32 @@ pub fn run() {
     let app_state = AppState::new();
 
     tauri::Builder::default()
+        // Ensure working directory is the EXE directory to avoid System32 cwd when launched via protocol
+        .setup(|_| {
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(dir) = exe.parent() {
+                    let _ = std::env::set_current_dir(dir);
+                }
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let _ = app.emit_all("single-instance", &serde_json::json!({
+                "argv": args,
+                "cwd": cwd,
+            }));
+            if let Some(win) = app.get_window("main") {
+                let _ = win.set_focus();
+                let _ = win.unminimize();
+                let _ = win.show();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -541,15 +562,16 @@ async fn list_gallery() -> Result<Vec<GalleryItemDto>, String> {
 
 #[tauri::command]
 async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
-    // Config is stored as "config.json" in the current working directory
-    let current_dir = std::env::current_dir().map_err(|e| e.to_string())?;
-    let dir_str = current_dir
+    // Open the directory that actually contains config.json beside the EXE
+    let exe_dir = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .parent()
+        .ok_or_else(|| "Failed to resolve executable directory".to_string())?
+        .to_path_buf();
+    let dir_str = exe_dir
         .to_str()
         .ok_or_else(|| "Invalid directory path".to_string())?;
-
-    app.opener()
-        .open_path(dir_str, None::<&str>)
-        .map_err(|e| e.to_string())
+    app.opener().open_path(dir_str, None::<&str>).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
