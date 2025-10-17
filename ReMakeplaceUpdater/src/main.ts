@@ -423,7 +423,7 @@ class ReMakeplaceUpdater {
       grid.innerHTML = list
         .map((it) => {
           const src = it.image_path ? convertFileSrc(it.image_path) : null;
-          const img = src ? `<img src="${src}" alt="" class="thumb"/>` : `<div class="thumb placeholder"></div>`;
+          const img = src ? `<img src="${src}" alt="" class="thumb" crossorigin="anonymous"/>` : `<div class="thumb placeholder"></div>`;
           return `
           <div class="card">
             <div class="thumb-wrap">${img}</div>
@@ -447,7 +447,7 @@ class ReMakeplaceUpdater {
           const jsonPath = el.getAttribute("data-json");
           if (!jsonPath) return;
           try {
-            await invoke("open_url", { url: `file://${jsonPath}` });
+            await invoke("reveal_path", { path: jsonPath });
           } catch (err) {
             console.error("Failed to open path:", err);
           }

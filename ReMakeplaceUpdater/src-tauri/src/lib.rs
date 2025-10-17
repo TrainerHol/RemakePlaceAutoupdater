@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tauri::{Emitter, Manager};
+use tauri::ipc::RemoteDomainAccessScope;
 use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 use tauri_plugin_deep_link;
@@ -478,6 +479,10 @@ pub fn run() {
                     eprintln!("Deep link register_all failed: {}", e);
                 }
             }
+            // Allow loading file images via convertFileSrc (asset.localhost)
+            app.ipc_scope().configure_remote_access(
+                RemoteDomainAccessScope::new("asset.localhost").add_window("main")
+            );
             Ok(())
         })
         .manage(Arc::new(Mutex::new(app_state)))
@@ -500,6 +505,7 @@ pub fn run() {
             open_url,
             handle_deep_link,
             list_gallery,
+            reveal_path,
             delete_gallery_entry
         ])
         .run(tauri::generate_context!())
@@ -587,4 +593,31 @@ async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.opener()
         .open_url(&url, None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn reveal_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    // Use shell plugin to reveal in OS file explorer when possible
+    #[cfg(target_os = "windows")]
+    {
+        use tauri_plugin_shell::ShellExt;
+        let shell = app.shell();
+        let _ = shell.command("explorer").args(["/select,", &path]).spawn();
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_shell::ShellExt;
+        let shell = app.shell();
+        let _ = shell.command("open").args(["-R", &path]).spawn();
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use tauri_plugin_shell::ShellExt;
+        let shell = app.shell();
+        // Try common file managers
+        let _ = shell.command("xdg-open").args([std::path::Path::new(&path).parent().and_then(|p| p.to_str()).unwrap_or(".")]).spawn();
+        return Ok(());
+    }
 }
