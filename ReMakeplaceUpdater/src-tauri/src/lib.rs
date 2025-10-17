@@ -6,6 +6,7 @@ use tauri::{Emitter};
 use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 use tauri_plugin_deep_link;
+use tauri_plugin_deep_link::DeepLinkExt;
 use url::Url;
 use tauri_plugin_notification::NotificationExt;
 use base64::{engine::general_purpose, Engine as _};
@@ -446,6 +447,17 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            {
+                // Ensure protocol registration for dev/portable builds on current binary
+                if let Err(e) = app.deep_link().register_all() {
+                    // Non-fatal: deep link may still work if already registered
+                    eprintln!("Deep link register_all failed: {}", e);
+                }
+            }
+            Ok(())
+        })
         .manage(Arc::new(Mutex::new(app_state)))
         .invoke_handler(tauri::generate_handler![
             load_config,
@@ -501,7 +513,7 @@ async fn handle_deep_link(app: tauri::AppHandle, url: String) -> Result<(), Stri
             let _ = app
                 .notification()
                 .builder()
-                .title("MakePlace")
+                .title("RMP Companion")
                 .body(format!("Design has been added ({}).", json_path))
                 .show();
             Ok(())

@@ -28,7 +28,8 @@ body {
   height: 80px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  padding: 0 16px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
@@ -37,6 +38,34 @@ body {
   font-size: 28px;
   font-weight: 600;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Top Tabs */
+.tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 100%;
+}
+
+.tab {
+  background: transparent;
+  color: #ffffff;
+  border: none;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.8;
+  border-bottom: 3px solid transparent;
+}
+
+.tab:hover {
+  opacity: 1;
+}
+
+.tab.active {
+  opacity: 1;
+  border-bottom-color: #ffffff;
 }
 
 /* MOTD Line */
@@ -71,6 +100,105 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* Gallery layout */
+.gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.gallery-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: #232323;
+  border: 1px solid #404040;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.thumb-wrap {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb.placeholder {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(45deg, #262626, #262626 10px, #2c2c2c 10px, #2c2c2c 20px);
+}
+
+.meta {
+  padding: 12px;
+}
+
+.meta .title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.meta .sub {
+  color: #b3b3b3;
+  font-size: 12px;
+}
+
+.actions {
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.gallery-empty {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px dashed #555;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255, 140, 66, 0.06) 0%, rgba(230, 115, 42, 0.06) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.empty-illustration {
+  font-size: 40px;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.empty-sub {
+  font-size: 13px;
+  color: #bbbbbb;
+  max-width: 560px;
 }
 
 /* Footer */

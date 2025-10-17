@@ -40,7 +40,7 @@ class ReMakeplaceUpdater {
       <div class="app-container">
         <!-- Header Section -->
         <div class="header">
-          <h1>ReMakeplace Launcher</h1>
+          <h1>RMP Companion</h1>
           <div class="tabs">
             <button id="tab-updates" class="tab active">Updates</button>
             <button id="tab-gallery" class="tab">Gallery</button>
@@ -93,7 +93,17 @@ class ReMakeplaceUpdater {
           </div>
           <div id="view-gallery" style="display:none;">
             <div class="section">
+              <div class="gallery-header">
+                <h2 class="gallery-title">Your Designs</h2>
+                <button id="download-designs-btn" class="btn btn-primary btn-small">Download Designs</button>
+              </div>
               <div id="gallery-grid" class="gallery-grid"></div>
+              <div id="gallery-empty" class="gallery-empty" style="display:none;">
+                <div class="empty-illustration">📦</div>
+                <div class="empty-title">No designs yet</div>
+                <div class="empty-sub">Use the “Open in RMP Companion” button on ffxivhousing.com to send designs here, or browse and download from the website.</div>
+                <button id="download-designs-btn-empty" class="btn btn-primary">Download Designs</button>
+              </div>
             </div>
           </div>
         </div>
@@ -405,8 +415,12 @@ class ReMakeplaceUpdater {
     try {
       const items = await invoke<any>("list_gallery");
       const grid = document.getElementById("gallery-grid") as HTMLElement | null;
+      const empty = document.getElementById("gallery-empty") as HTMLElement | null;
+      const headerBtn = document.getElementById("download-designs-btn") as HTMLButtonElement | null;
+      const emptyBtn = document.getElementById("download-designs-btn-empty") as HTMLButtonElement | null;
       if (!grid) return;
-      grid.innerHTML = (items as Array<any>)
+      const list = items as Array<any>;
+      grid.innerHTML = list
         .map((it) => {
           const img = it.image_path ? `<img src="${it.image_path}" alt="" class="thumb"/>` : `<div class="thumb placeholder"></div>`;
           return `
@@ -437,6 +451,27 @@ class ReMakeplaceUpdater {
           }
         });
       });
+
+      const openWebsite = async () => {
+        try {
+          await invoke("open_url", { url: "https://ffxivhousing.com" });
+        } catch (e) {
+          console.error("Failed to open website:", e);
+        }
+      };
+
+      if (headerBtn) headerBtn.onclick = openWebsite;
+      if (emptyBtn) emptyBtn.onclick = openWebsite;
+
+      if (empty) {
+        if (!list || list.length === 0) {
+          empty.style.display = "flex";
+          grid.style.display = "none";
+        } else {
+          empty.style.display = "none";
+          grid.style.display = "grid";
+        }
+      }
     } catch (e) {
       console.error("Failed to load gallery:", e);
     }
@@ -651,7 +686,7 @@ class ReMakeplaceUpdater {
     const versionOverrideCheckbox = document.getElementById("version-override") as HTMLInputElement;
 
     if (isFirstRun) {
-      modalHeader.textContent = "Welcome to ReMakeplace Launcher";
+      modalHeader.textContent = "Welcome to RMP Companion";
       const modalBody = modal.querySelector(".modal-body")!;
       const existingWelcome = modalBody.querySelector(".welcome-message");
       if (!existingWelcome) {

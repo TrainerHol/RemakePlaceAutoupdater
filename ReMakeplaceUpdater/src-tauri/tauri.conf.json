@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ReMakeplace Launcher",
+  "productName": "RMP Companion",
   "version": "1.2.9",
   "identifier": "com.remakeplaceupdater.app",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "ReMakeplace Launcher",
+        "title": "RMP Companion",
         "width": 600,
         "height": 690,
         "resizable": true,
