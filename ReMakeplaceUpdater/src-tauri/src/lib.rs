@@ -448,7 +448,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 // Ensure protocol registration for dev/portable builds on current binary
                 if let Err(e) = app.deep_link().register_all() {
