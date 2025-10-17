@@ -73,7 +73,7 @@ pub fn list_entries() -> Result<Vec<GalleryItemDto>> {
                 kind: row.get(2)?,
                 author: row.get(3)?,
                 json_path: row.get(4)?,
-                image_path: row.get(5).ok(),
+                image_path: row.get::<_, Option<String>>(5)?,
                 added_at: row.get(6)?,
             })
         })
@@ -90,4 +90,22 @@ pub fn get_images_dir() -> PathBuf {
     let dir = get_app_data_dir().join("images");
     let _ = std::fs::create_dir_all(&dir);
     dir
+}
+
+pub fn delete_entry(id: &str) -> Result<()> {
+    let conn = Connection::open(get_db_path()).context("Failed to open DB for delete")?;
+    // fetch paths to remove files after deletion
+    let mut stmt = conn.prepare("SELECT json_path, image_path FROM designs WHERE id = ?1")
+        .context("Prepare select for delete failed")?;
+    let mut rows = stmt.query(params![id]).context("Select for delete query failed")?;
+    let (json_path, image_path): (Option<String>, Option<String>) = if let Some(row) = rows.next()? {
+        (row.get(0).ok(), row.get(1).ok())
+    } else {
+        (None, None)
+    };
+    drop(rows);
+    conn.execute("DELETE FROM designs WHERE id = ?1", params![id]).context("Failed to delete gallery entry")?;
+    if let Some(p) = json_path { let _ = std::fs::remove_file(p); }
+    if let Some(p) = image_path { let _ = std::fs::remove_file(p); }
+    Ok(())
 }

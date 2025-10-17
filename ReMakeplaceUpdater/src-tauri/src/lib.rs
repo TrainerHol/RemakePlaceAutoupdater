@@ -29,6 +29,7 @@ use extractor::Extractor;
 use launcher::Launcher;
 use error_handler::{ErrorHandler, ErrorInfo};
 use gallery::GalleryItemDto;
+use gallery as gallery_mod;
 
 // Application state to track current operations
 #[derive(Default)]
@@ -498,7 +499,8 @@ pub fn run() {
             open_config_folder,
             open_url,
             handle_deep_link,
-            list_gallery
+            list_gallery,
+            delete_gallery_entry
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -558,6 +560,12 @@ fn url_encode(s: &str) -> String {
 async fn list_gallery() -> Result<Vec<GalleryItemDto>, String> {
     gallery::init_db().map_err(|e| e.to_string())?;
     gallery::list_entries().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_gallery_entry(id: String) -> Result<(), String> {
+    gallery::init_db().map_err(|e| e.to_string())?;
+    gallery_mod::delete_entry(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

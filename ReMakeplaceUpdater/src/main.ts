@@ -1,7 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode, ErrorInfo, Metadata } from "./types";
 import { AppState, ErrorCategory } from "./types";
 
@@ -34,7 +33,6 @@ class ReMakeplaceUpdater {
     this.loadConfiguration();
     this.loadMetadata();
     this.setupDeepLinkListener();
-    this.setupSingleInstanceHandler();
   }
 
   private initializeUI() {
@@ -424,7 +422,8 @@ class ReMakeplaceUpdater {
       const list = items as Array<any>;
       grid.innerHTML = list
         .map((it) => {
-          const img = it.image_path ? `<img src="${it.image_path}" alt="" class="thumb"/>` : `<div class="thumb placeholder"></div>`;
+          const src = it.image_path ? convertFileSrc(it.image_path) : null;
+          const img = src ? `<img src="${src}" alt="" class="thumb"/>` : `<div class="thumb placeholder"></div>`;
           return `
           <div class="card">
             <div class="thumb-wrap">${img}</div>
@@ -434,6 +433,7 @@ class ReMakeplaceUpdater {
             </div>
             <div class="actions">
               <button data-json="${it.json_path}" class="btn btn-small open-folder">Show in Folder</button>
+              <button data-id="${it.id}" class="btn btn-small btn-secondary delete-entry">Delete</button>
             </div>
           </div>
         `;
@@ -450,6 +450,21 @@ class ReMakeplaceUpdater {
             await invoke("open_url", { url: `file://${jsonPath}` });
           } catch (err) {
             console.error("Failed to open path:", err);
+          }
+        });
+      });
+
+      // Wire delete actions
+      grid.querySelectorAll(".delete-entry").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const el = e.currentTarget as HTMLElement;
+          const id = el.getAttribute("data-id");
+          if (!id) return;
+          try {
+            await invoke("delete_gallery_entry", { id });
+            await this.loadGallery();
+          } catch (err) {
+            console.error("Failed to delete entry:", err);
           }
         });
       });
@@ -520,43 +535,24 @@ class ReMakeplaceUpdater {
         const url = urls[0];
         try {
           await invoke("handle_deep_link", { url });
+          // Switch to Gallery and refresh after import
+          const tabUpdates = document.getElementById("tab-updates") as HTMLButtonElement | null;
+          const tabGallery = document.getElementById("tab-gallery") as HTMLButtonElement | null;
+          const viewUpdates = document.getElementById("view-updates") as HTMLElement | null;
+          const viewGallery = document.getElementById("view-gallery") as HTMLElement | null;
+          if (tabGallery && tabUpdates && viewUpdates && viewGallery) {
+            tabGallery.classList.add("active");
+            tabUpdates.classList.remove("active");
+            viewUpdates.style.display = "none";
+            viewGallery.style.display = "block";
+          }
+          await this.loadGallery();
         } catch (e) {
           console.error("Failed to import from deep link:", e);
         }
       });
     } catch (e) {
       console.warn("Deep link plugin not available:", e);
-    }
-  }
-
-  private async setupSingleInstanceHandler() {
-    // Bring existing window to front and forward any URL args
-    try {
-      await tauriListen<{ argv: Array<string>; cwd: string }>("single-instance", async (e) => {
-        const { argv } = e.payload;
-        const urlArg = Array.isArray(argv) ? argv.find((a) => typeof a === "string" && a.startsWith("makeplace://")) : undefined;
-        // Always switch to Gallery view
-        const tabUpdates = document.getElementById("tab-updates") as HTMLButtonElement | null;
-        const tabGallery = document.getElementById("tab-gallery") as HTMLButtonElement | null;
-        const viewUpdates = document.getElementById("view-updates") as HTMLElement | null;
-        const viewGallery = document.getElementById("view-gallery") as HTMLElement | null;
-        if (tabGallery && tabUpdates && viewUpdates && viewGallery) {
-          tabGallery.classList.add("active");
-          tabUpdates.classList.remove("active");
-          viewUpdates.style.display = "none";
-          viewGallery.style.display = "block";
-        }
-        if (urlArg) {
-          try {
-            await invoke("handle_deep_link", { url: urlArg });
-            await this.loadGallery();
-          } catch (e) {
-            console.error("Failed handling forwarded deep link:", e);
-          }
-        }
-      });
-    } catch (e) {
-      // optional
     }
   }
 
