@@ -7,7 +7,6 @@ use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 use tauri_plugin_deep_link;
 use tauri_plugin_deep_link::DeepLinkExt;
-use tauri_plugin_single_instance::SingleInstanceExt;
 use url::Url;
 use tauri_plugin_notification::NotificationExt;
 use base64::{engine::general_purpose, Engine as _};
