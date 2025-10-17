@@ -1,7 +1,7 @@
-use std::path::{PathBuf};
-use rusqlite::{Connection, params};
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use chrono::Utc;
+use rusqlite::{params, Connection};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct GalleryItemDto {
@@ -40,11 +40,19 @@ pub fn init_db() -> Result<()> {
             added_at INTEGER NOT NULL
         );
         "#,
-    ).context("Failed to create table")?;
+    )
+    .context("Failed to create table")?;
     Ok(())
 }
 
-pub fn add_entry(id: &str, title: &str, kind: &str, author: &str, json_path: &str, image_path: Option<&str>) -> Result<()> {
+pub fn add_entry(
+    id: &str,
+    title: &str,
+    kind: &str,
+    author: &str,
+    json_path: &str,
+    image_path: Option<&str>,
+) -> Result<()> {
     let conn = Connection::open(get_db_path()).context("Failed to open DB for insert")?;
     conn.execute(
         "INSERT OR REPLACE INTO designs (id, title, kind, author, json_path, image_path, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -57,17 +65,19 @@ pub fn list_entries() -> Result<Vec<GalleryItemDto>> {
     let conn = Connection::open(get_db_path()).context("Failed to open DB for list")?;
     let mut stmt = conn.prepare("SELECT id, title, kind, author, json_path, image_path, added_at FROM designs ORDER BY added_at DESC")
         .context("Prepare list query failed")?;
-    let rows = stmt.query_map([], |row| {
-        Ok(GalleryItemDto {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            kind: row.get(2)?,
-            author: row.get(3)?,
-            json_path: row.get(4)?,
-            image_path: row.get(5).ok(),
-            added_at: row.get(6)?,
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(GalleryItemDto {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                kind: row.get(2)?,
+                author: row.get(3)?,
+                json_path: row.get(4)?,
+                image_path: row.get(5).ok(),
+                added_at: row.get(6)?,
+            })
         })
-    }).context("Query map failed")?;
+        .context("Query map failed")?;
 
     let mut items = Vec::new();
     for item in rows {
@@ -81,5 +91,3 @@ pub fn get_images_dir() -> PathBuf {
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
-
-

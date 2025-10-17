@@ -1,8 +1,8 @@
+use crate::error_handler::{ErrorHandler, ErrorInfo};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use anyhow::{Result, Context};
-use crate::error_handler::{ErrorHandler, ErrorInfo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -34,14 +34,13 @@ pub struct ConfigManager;
 impl ConfigManager {
     pub fn load_config() -> Result<Config> {
         let config_path = Self::get_config_path();
-        
+
         if config_path.exists() {
-            let content = fs::read_to_string(&config_path)
-                .context("Failed to read config.json")?;
-            
-            let config: Config = serde_json::from_str(&content)
-                .context("Failed to parse config.json")?;
-            
+            let content = fs::read_to_string(&config_path).context("Failed to read config.json")?;
+
+            let config: Config =
+                serde_json::from_str(&content).context("Failed to parse config.json")?;
+
             Ok(config)
         } else {
             let default_config = Self::create_default();
@@ -52,12 +51,10 @@ impl ConfigManager {
 
     pub fn save_config(config: &Config) -> Result<()> {
         let config_path = Self::get_config_path();
-        let content = serde_json::to_string_pretty(config)
-            .context("Failed to serialize config")?;
-        
-        fs::write(&config_path, content)
-            .context("Failed to write config.json")?;
-        
+        let content = serde_json::to_string_pretty(config).context("Failed to serialize config")?;
+
+        fs::write(&config_path, content).context("Failed to write config.json")?;
+
         Ok(())
     }
 
@@ -67,11 +64,9 @@ impl ConfigManager {
             github_repo: "RemakePlace/app".to_string(),
             installation_path: String::new(),
             exe_path: "Makeplace.exe".to_string(),
-            preserve_folders: vec![
-                "Makeplace/Custom".to_string(),
-                "Makeplace/Save".to_string(),
-            ],
-            update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest".to_string(),
+            preserve_folders: vec!["Makeplace/Custom".to_string(), "Makeplace/Save".to_string()],
+            update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest"
+                .to_string(),
             last_check: chrono::Utc::now().to_rfc3339(),
             auto_check: true,
             installation_mode: InstallationMode::Update,
@@ -83,7 +78,11 @@ impl ConfigManager {
     }
 
     /// Enhanced path validation that provides detailed error information
-    pub fn validate_installation_path_detailed(path: &str, exe_name: &str, mode: &InstallationMode) -> Result<(), ErrorInfo> {
+    pub fn validate_installation_path_detailed(
+        path: &str,
+        exe_name: &str,
+        mode: &InstallationMode,
+    ) -> Result<(), ErrorInfo> {
         if path.is_empty() {
             return Err(ErrorInfo {
                 category: crate::error_handler::ErrorCategory::Validation,
@@ -95,7 +94,7 @@ impl ConfigManager {
         }
 
         let path_buf = PathBuf::from(path);
-        
+
         // Check if path exists
         if !path_buf.exists() {
             return Err(ErrorInfo {
@@ -106,7 +105,7 @@ impl ConfigManager {
                 is_retryable: false,
             });
         }
-        
+
         // Check if it's a directory
         if !path_buf.is_dir() {
             return Err(ErrorInfo {
@@ -125,7 +124,8 @@ impl ConfigManager {
                 category: crate::error_handler::ErrorCategory::Permission,
                 user_message: "Cannot write to the selected directory.".to_string(),
                 technical_details: format!("Write permission test failed: {}", e),
-                recovery_suggestion: "Choose a different directory or run as administrator.".to_string(),
+                recovery_suggestion: "Choose a different directory or run as administrator."
+                    .to_string(),
                 is_retryable: false,
             });
         } else {
@@ -139,19 +139,29 @@ impl ConfigManager {
                 if !exe_path.exists() {
                     return Err(ErrorInfo {
                         category: crate::error_handler::ErrorCategory::Validation,
-                        user_message: format!("Could not find {} in the selected directory.", exe_name),
+                        user_message: format!(
+                            "Could not find {} in the selected directory.",
+                            exe_name
+                        ),
                         technical_details: format!("Executable not found: {}", exe_path.display()),
-                        recovery_suggestion: "Select the directory containing your ReMakeplace installation.".to_string(),
+                        recovery_suggestion:
+                            "Select the directory containing your ReMakeplace installation."
+                                .to_string(),
                         is_retryable: false,
                     });
                 }
-                
+
                 if !exe_path.is_file() {
                     return Err(ErrorInfo {
                         category: crate::error_handler::ErrorCategory::Validation,
-                        user_message: format!("{} exists but is not a valid executable file.", exe_name),
+                        user_message: format!(
+                            "{} exists but is not a valid executable file.",
+                            exe_name
+                        ),
                         technical_details: format!("Path is not a file: {}", exe_path.display()),
-                        recovery_suggestion: "Select the correct directory containing the ReMakeplace executable.".to_string(),
+                        recovery_suggestion:
+                            "Select the correct directory containing the ReMakeplace executable."
+                                .to_string(),
                         is_retryable: false,
                     });
                 }
@@ -192,8 +202,12 @@ impl ConfigManager {
     /// Get a user-friendly description of the detected installation mode
     pub fn get_mode_description(mode: &InstallationMode) -> &'static str {
         match mode {
-            InstallationMode::Update => "Existing installation detected - updates will preserve your data",
-            InstallationMode::FreshInstall => "No existing installation found - will perform fresh install",
+            InstallationMode::Update => {
+                "Existing installation detected - updates will preserve your data"
+            }
+            InstallationMode::FreshInstall => {
+                "No existing installation found - will perform fresh install"
+            }
         }
     }
 
@@ -207,4 +221,4 @@ impl Default for Config {
     fn default() -> Self {
         ConfigManager::create_default()
     }
-} 
+}

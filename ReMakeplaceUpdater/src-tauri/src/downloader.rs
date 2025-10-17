@@ -1,18 +1,18 @@
-use serde::Serialize;
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::io::{Write, Read};
-use std::time::Instant;
-use anyhow::{Result, Context};
-use crate::retry_manager::RetryManager;
 use crate::error_handler::{ErrorHandler, ErrorInfo};
-use tokio::time::{timeout, sleep, Duration};
+use crate::retry_manager::RetryManager;
+use anyhow::{Context, Result};
 use rand::random;
+use serde::Serialize;
+use std::fs;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+use tokio::time::{sleep, timeout, Duration};
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct ProgressInfo {
     pub percentage: f64,
-    pub speed: f64,         // MB/s
+    pub speed: f64, // MB/s
     pub downloaded: u64,
     pub total: u64,
     pub retry_count: u32,
@@ -23,11 +23,7 @@ pub struct ProgressInfo {
 pub struct Downloader;
 
 impl Downloader {
-    pub async fn download_file<F>(
-        url: &str,
-        filepath: &Path,
-        progress_callback: F,
-    ) -> Result<()>
+    pub async fn download_file<F>(url: &str, filepath: &Path, progress_callback: F) -> Result<()>
     where
         F: Fn(ProgressInfo) + Send + 'static,
     {
@@ -68,7 +64,8 @@ impl Downloader {
                 resume_this_attempt,
                 &progress_callback,
                 attempt,
-            ).await;
+            )
+            .await;
 
             match result {
                 Ok(()) => return Ok(()),
@@ -124,8 +121,7 @@ impl Downloader {
     {
         // Create parent directory if it doesn't exist
         if let Some(parent) = filepath.parent() {
-            fs::create_dir_all(parent)
-                .context("Failed to create cache directory")?;
+            fs::create_dir_all(parent).context("Failed to create cache directory")?;
         }
 
         // Check available disk space before starting download
@@ -136,18 +132,21 @@ impl Downloader {
         // Check if we should resume download
         let mut start_byte = 0u64;
         let mut supports_range = true;
-        
+
         if resume && filepath.exists() {
             start_byte = fs::metadata(filepath)
                 .context("Failed to get file metadata for resume")?
                 .len();
-                
+
             // Only attempt resume if file has meaningful content
             if start_byte > 0 {
                 // Test if server supports Range requests with a HEAD request
                 match Self::test_range_support(&client, url).await {
                     Ok(true) => {
-                        println!("Server supports Range requests, resuming download from byte {}", start_byte);
+                        println!(
+                            "Server supports Range requests, resuming download from byte {}",
+                            start_byte
+                        );
                     }
                     Ok(false) => {
                         println!("Server doesn't support Range requests, restarting download");
@@ -159,7 +158,10 @@ impl Downloader {
                         }
                     }
                     Err(e) => {
-                        println!("Could not test Range support ({}), attempting resume anyway", e);
+                        println!(
+                            "Could not test Range support ({}), attempting resume anyway",
+                            e
+                        );
                         // Continue with resume attempt - server might still support it
                     }
                 }
@@ -172,16 +174,15 @@ impl Downloader {
             if start_byte > 0 && supports_range {
                 request = request.header("Range", format!("bytes={}-", start_byte));
             }
-            let resp = request
-                .send()
-                .await
-                .context("Failed to start download")?;
+            let resp = request.send().await.context("Failed to start download")?;
 
             let status = resp.status();
 
             // If resuming, require 206; if 200 or 416, restart from scratch
             if start_byte > 0 && supports_range {
-                if status == reqwest::StatusCode::OK || status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+                if status == reqwest::StatusCode::OK
+                    || status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE
+                {
                     let _ = fs::remove_file(filepath);
                     start_byte = 0;
                     supports_range = false;
@@ -223,8 +224,7 @@ impl Downloader {
                 .open(filepath)
                 .context("Failed to open file for resume")?
         } else {
-            std::fs::File::create(filepath)
-                .context("Failed to create download file")?
+            std::fs::File::create(filepath).context("Failed to create download file")?
         };
 
         let mut downloaded = start_byte;
@@ -251,8 +251,10 @@ impl Downloader {
         // Per-chunk read timeout (minimum 30s)
         let read_timeout = Duration::from_secs(30);
 
-        while let Some(next_chunk) = timeout(read_timeout, stream.next()).await
-            .map_err(|_| anyhow::anyhow!("Chunk read timed out"))? {
+        while let Some(next_chunk) = timeout(read_timeout, stream.next())
+            .await
+            .map_err(|_| anyhow::anyhow!("Chunk read timed out"))?
+        {
             let chunk = next_chunk.context("Failed to read download chunk")?;
             file.write_all(&chunk)
                 .context("Failed to write download chunk")?;
@@ -285,7 +287,8 @@ impl Downloader {
             if last_update.elapsed().as_millis() >= 100 {
                 let elapsed = start_time.elapsed().as_secs_f64();
                 let speed = if elapsed > 0.0 {
-                    ((downloaded - start_byte) as f64) / (1024.0 * 1024.0) / elapsed // MB/s
+                    ((downloaded - start_byte) as f64) / (1024.0 * 1024.0) / elapsed
+                // MB/s
                 } else {
                     0.0
                 };
@@ -370,25 +373,25 @@ impl Downloader {
     async fn check_disk_space(filepath: &Path) -> Result<()> {
         // Get the directory where the file will be stored
         let dir = filepath.parent().unwrap_or(Path::new("."));
-        
+
         // Try to get available space (this is platform-specific)
         #[cfg(unix)]
         {
             use std::ffi::CString;
             use std::mem;
             use std::os::unix::ffi::OsStrExt;
-            
+
             let path_cstr = CString::new(dir.as_os_str().as_bytes())
                 .context("Failed to convert path to CString")?;
-            
+
             let mut statvfs: libc::statvfs = unsafe { mem::zeroed() };
             let result = unsafe { libc::statvfs(path_cstr.as_ptr(), &mut statvfs) };
-            
+
             if result == 0 {
                 // Cast to u64 to handle different platforms (macOS vs Linux have different field types)
                 let available_bytes = (statvfs.f_bavail as u64) * (statvfs.f_frsize as u64);
                 let min_required = 100 * 1024 * 1024; // Require at least 100MB free
-                
+
                 if available_bytes < min_required {
                     return Err(anyhow::anyhow!(
                         "Not enough disk space. Available: {} MB, Required: {} MB",
@@ -396,13 +399,16 @@ impl Downloader {
                         min_required / (1024 * 1024)
                     ));
                 }
-                
-                println!("Disk space check passed. Available: {} MB", available_bytes / (1024 * 1024));
+
+                println!(
+                    "Disk space check passed. Available: {} MB",
+                    available_bytes / (1024 * 1024)
+                );
             } else {
                 println!("Warning: Could not check disk space, proceeding anyway");
             }
         }
-        
+
         #[cfg(windows)]
         {
             use std::fs;
@@ -418,12 +424,12 @@ impl Downloader {
                 }
             }
         }
-        
+
         #[cfg(not(any(unix, windows)))]
         {
             println!("Disk space check not implemented for this platform");
         }
-        
+
         Ok(())
     }
 
@@ -432,15 +438,17 @@ impl Downloader {
             return Ok(false);
         }
 
-        let metadata = fs::metadata(filepath)
-            .context("Failed to get file metadata")?;
-        
+        let metadata = fs::metadata(filepath).context("Failed to get file metadata")?;
+
         let file_size = metadata.len();
-        
+
         // If we have expected size, check if file is complete
         if let Some(expected) = expected_size {
             if file_size != expected {
-                println!("File size mismatch: expected {}, got {}", expected, file_size);
+                println!(
+                    "File size mismatch: expected {}, got {}",
+                    expected, file_size
+                );
                 return Ok(false);
             }
         }
@@ -450,7 +458,7 @@ impl Downloader {
             println!("File is empty");
             return Ok(false);
         }
-        
+
         // For very small files (< 1KB), they're likely incomplete
         if file_size < 1024 {
             println!("File is suspiciously small: {} bytes", file_size);
@@ -479,15 +487,12 @@ impl Downloader {
         }
     }
 
-
-
     pub fn manage_cache(cache_dir: &Path, keep_current: bool) -> Result<()> {
         if !cache_dir.exists() {
             return Ok(());
         }
 
-        let entries = fs::read_dir(cache_dir)
-            .context("Failed to read cache directory")?;
+        let entries = fs::read_dir(cache_dir).context("Failed to read cache directory")?;
 
         for entry in entries {
             let entry = entry.context("Failed to read cache entry")?;
@@ -524,5 +529,3 @@ impl Downloader {
         }
     }
 }
-
- 

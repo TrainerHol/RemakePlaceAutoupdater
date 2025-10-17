@@ -1,6 +1,6 @@
-use std::time::Duration;
-use rand::Rng;
 use anyhow::{Error, Result};
+use rand::Rng;
+use std::time::Duration;
 use tokio::time::sleep;
 
 /// Defines the types of errors that can be retried
@@ -113,7 +113,7 @@ impl RetryManager {
                     ErrorType::TemporaryFailure,
                 ],
                 backoff_strategy: BackoffStrategy::Exponential {
-                    base: 1000,     // 1 second
+                    base: 1000,      // 1 second
                     multiplier: 2.0, // 1s, 2s, 4s, 8s, 16s
                 },
             },
@@ -146,7 +146,8 @@ impl RetryManager {
                         if msg.contains("connection reset")
                             || msg.contains("connection refused")
                             || msg.contains("broken pipe")
-                            || msg.contains("econnreset") {
+                            || msg.contains("econnreset")
+                        {
                             return true;
                         }
                     }
@@ -154,7 +155,8 @@ impl RetryManager {
                         if msg.contains("chunk")
                             || msg.contains("incomplete read")
                             || msg.contains("unexpected eof")
-                            || msg.contains("failed to read download chunk") {
+                            || msg.contains("failed to read download chunk")
+                        {
                             return true;
                         }
                     }
@@ -165,7 +167,8 @@ impl RetryManager {
                             || msg.contains("429")
                             || msg.contains("502")
                             || msg.contains("503")
-                            || msg.contains("504") {
+                            || msg.contains("504")
+                        {
                             return true;
                         }
                     }
@@ -190,7 +193,7 @@ impl RetryManager {
         };
 
         let delay = Duration::from_millis(delay_ms);
-        
+
         // Cap the delay at max_delay
         if delay > self.max_delay {
             self.max_delay
@@ -216,7 +219,11 @@ impl RetryManager {
             millis.saturating_add(offset as u64)
         };
         let dur = Duration::from_millis(adj);
-        if dur > self.max_delay { self.max_delay } else { dur }
+        if dur > self.max_delay {
+            self.max_delay
+        } else {
+            dur
+        }
     }
 
     /// Executes an async operation with retry logic
@@ -226,16 +233,16 @@ impl RetryManager {
         Fut: std::future::Future<Output = Result<T>>,
     {
         let mut last_error = None;
-        
+
         for attempt in 0..=self.max_retries {
             // Execute the operation with timeout
             let result = tokio::time::timeout(self.timeout, operation()).await;
-            
+
             match result {
                 Ok(Ok(success)) => return Ok(success),
                 Ok(Err(error)) => {
                     last_error = Some(error);
-                    
+
                     // Check if we should retry this error
                     if let Some(ref err) = last_error {
                         if attempt < self.max_retries && self.should_retry(err) {
@@ -254,9 +261,10 @@ impl RetryManager {
                     break;
                 }
                 Err(_timeout_error) => {
-                    let timeout_error = anyhow::anyhow!("Operation timed out after {:?}", self.timeout);
+                    let timeout_error =
+                        anyhow::anyhow!("Operation timed out after {:?}", self.timeout);
                     last_error = Some(timeout_error);
-                    
+
                     if attempt < self.max_retries {
                         let delay = self.calculate_delay(attempt);
                         println!(
@@ -272,9 +280,11 @@ impl RetryManager {
                 }
             }
         }
-        
+
         // All retries exhausted, return the last error
-        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Operation failed after {} retries", self.max_retries)))
+        Err(last_error.unwrap_or_else(|| {
+            anyhow::anyhow!("Operation failed after {} retries", self.max_retries)
+        }))
     }
 
     /// Executes a synchronous operation with retry logic (for non-async operations)
@@ -283,13 +293,13 @@ impl RetryManager {
         F: FnMut() -> Result<T>,
     {
         let mut last_error = None;
-        
+
         for attempt in 0..=self.max_retries {
             match operation() {
                 Ok(success) => return Ok(success),
                 Err(error) => {
                     last_error = Some(error);
-                    
+
                     // Check if we should retry this error
                     if let Some(ref err) = last_error {
                         if attempt < self.max_retries && self.should_retry(err) {
@@ -309,9 +319,11 @@ impl RetryManager {
                 }
             }
         }
-        
+
         // All retries exhausted, return the last error
-        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Operation failed after {} retries", self.max_retries)))
+        Err(last_error.unwrap_or_else(|| {
+            anyhow::anyhow!("Operation failed after {} retries", self.max_retries)
+        }))
     }
 }
 
@@ -331,13 +343,13 @@ mod tests {
     #[test]
     fn test_retry_manager_new_default_configuration() {
         let retry_manager = RetryManager::new();
-        
+
         assert_eq!(retry_manager.max_retries, 3);
         assert_eq!(retry_manager.base_delay, Duration::from_millis(1000));
         assert_eq!(retry_manager.max_delay, Duration::from_secs(60));
         assert_eq!(retry_manager.timeout, Duration::from_secs(30));
         assert_eq!(retry_manager.retry_policy.retry_on.len(), 4);
-        
+
         // Verify default backoff strategy
         match retry_manager.retry_policy.backoff_strategy {
             BackoffStrategy::Exponential { base, multiplier } => {
@@ -356,7 +368,7 @@ mod tests {
             Duration::from_secs(30),
             Duration::from_secs(15),
         );
-        
+
         assert_eq!(retry_manager.max_retries, 5);
         assert_eq!(retry_manager.base_delay, Duration::from_millis(500));
         assert_eq!(retry_manager.max_delay, Duration::from_secs(30));
@@ -366,18 +378,30 @@ mod tests {
     #[test]
     fn test_retry_manager_for_network_operations() {
         let retry_manager = RetryManager::for_network_operations();
-        
+
         assert_eq!(retry_manager.max_retries, 3);
         assert_eq!(retry_manager.base_delay, Duration::from_millis(1000));
         assert_eq!(retry_manager.max_delay, Duration::from_secs(30));
         assert_eq!(retry_manager.timeout, Duration::from_secs(30));
         assert_eq!(retry_manager.retry_policy.retry_on.len(), 3);
-        
+
         // Verify it includes specific network error types
-        assert!(retry_manager.retry_policy.retry_on.contains(&ErrorType::NetworkTimeout));
-        assert!(retry_manager.retry_policy.retry_on.contains(&ErrorType::ConnectionReset));
-        assert!(retry_manager.retry_policy.retry_on.contains(&ErrorType::ChunkReadFailed));
-        assert!(!retry_manager.retry_policy.retry_on.contains(&ErrorType::TemporaryFailure));
+        assert!(retry_manager
+            .retry_policy
+            .retry_on
+            .contains(&ErrorType::NetworkTimeout));
+        assert!(retry_manager
+            .retry_policy
+            .retry_on
+            .contains(&ErrorType::ConnectionReset));
+        assert!(retry_manager
+            .retry_policy
+            .retry_on
+            .contains(&ErrorType::ChunkReadFailed));
+        assert!(!retry_manager
+            .retry_policy
+            .retry_on
+            .contains(&ErrorType::TemporaryFailure));
     }
 
     #[test]
@@ -386,9 +410,9 @@ mod tests {
             retry_on: vec![ErrorType::NetworkTimeout],
             backoff_strategy: BackoffStrategy::Fixed { delay: 1500 },
         };
-        
+
         let retry_manager = RetryManager::new().with_policy(custom_policy);
-        
+
         assert_eq!(retry_manager.retry_policy.retry_on.len(), 1);
         match retry_manager.retry_policy.backoff_strategy {
             BackoffStrategy::Fixed { delay } => assert_eq!(delay, 1500),
@@ -411,7 +435,9 @@ mod tests {
         assert!(retry_manager.should_retry(&anyhow::anyhow!("Connection timeout")));
         assert!(retry_manager.should_retry(&anyhow::anyhow!("Operation timed out")));
         assert!(retry_manager.should_retry(&anyhow::anyhow!("REQUEST TIMEOUT")));
-        assert!(retry_manager.should_retry(&anyhow::anyhow!("Network operation timed out after 30s")));
+        assert!(
+            retry_manager.should_retry(&anyhow::anyhow!("Network operation timed out after 30s"))
+        );
     }
 
     #[test]
@@ -473,7 +499,7 @@ mod tests {
 
         // Should retry only network timeouts
         assert!(retry_manager.should_retry(&anyhow::anyhow!("Connection timeout")));
-        
+
         // Should not retry other errors that were retryable in default policy
         assert!(!retry_manager.should_retry(&anyhow::anyhow!("Connection reset by peer")));
         assert!(!retry_manager.should_retry(&anyhow::anyhow!("Chunk read failed")));
@@ -497,7 +523,7 @@ mod tests {
     #[test]
     fn test_calculate_delay_exponential_backoff() {
         let retry_manager = RetryManager::new();
-        
+
         let delay0 = retry_manager.calculate_delay(0);
         let delay1 = retry_manager.calculate_delay(1);
         let delay2 = retry_manager.calculate_delay(2);
@@ -513,18 +539,18 @@ mod tests {
     fn test_calculate_delay_exponential_with_custom_base_and_multiplier() {
         let custom_policy = RetryPolicy {
             retry_on: vec![ErrorType::NetworkTimeout],
-            backoff_strategy: BackoffStrategy::Exponential { 
-                base: 500, 
-                multiplier: 3.0 
+            backoff_strategy: BackoffStrategy::Exponential {
+                base: 500,
+                multiplier: 3.0,
             },
         };
         let retry_manager = RetryManager::new().with_policy(custom_policy);
-        
+
         let delay0 = retry_manager.calculate_delay(0);
         let delay1 = retry_manager.calculate_delay(1);
         let delay2 = retry_manager.calculate_delay(2);
 
-        assert_eq!(delay0, Duration::from_millis(500));  // 500ms * 3^0 = 500ms
+        assert_eq!(delay0, Duration::from_millis(500)); // 500ms * 3^0 = 500ms
         assert_eq!(delay1, Duration::from_millis(1500)); // 500ms * 3^1 = 1500ms
         assert_eq!(delay2, Duration::from_millis(4500)); // 500ms * 3^2 = 4500ms
     }
@@ -536,7 +562,7 @@ mod tests {
             backoff_strategy: BackoffStrategy::Linear { increment: 500 },
         };
         let retry_manager = RetryManager::new().with_policy(custom_policy);
-        
+
         let delay0 = retry_manager.calculate_delay(0);
         let delay1 = retry_manager.calculate_delay(1);
         let delay2 = retry_manager.calculate_delay(2);
@@ -555,7 +581,7 @@ mod tests {
             backoff_strategy: BackoffStrategy::Fixed { delay: 2000 },
         };
         let retry_manager = RetryManager::new().with_policy(custom_policy);
-        
+
         let delay0 = retry_manager.calculate_delay(0);
         let delay1 = retry_manager.calculate_delay(1);
         let delay2 = retry_manager.calculate_delay(2);
@@ -575,11 +601,11 @@ mod tests {
             Duration::from_millis(5000), // Max delay of 5 seconds
             Duration::from_secs(30),
         );
-        
+
         // With exponential backoff, attempt 3 would be 8000ms, but should be capped
         let delay3 = retry_manager.calculate_delay(3);
         let delay10 = retry_manager.calculate_delay(10); // Very large attempt
-        
+
         assert_eq!(delay3, Duration::from_millis(5000)); // Capped at max_delay
         assert_eq!(delay10, Duration::from_millis(5000)); // Also capped
     }
@@ -587,11 +613,11 @@ mod tests {
     #[test]
     fn test_calculate_delay_edge_cases() {
         let retry_manager = RetryManager::new();
-        
+
         // Test with very large attempt number
         let delay_large = retry_manager.calculate_delay(100);
         assert_eq!(delay_large, retry_manager.max_delay); // Should be capped
-        
+
         // Test with zero attempt
         let delay_zero = retry_manager.calculate_delay(0);
         assert_eq!(delay_zero, Duration::from_millis(1000));
@@ -672,7 +698,10 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 1); // Called only once (no retries)
-        assert!(result.unwrap_err().to_string().contains("Permission denied"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Permission denied"));
     }
 
     #[tokio::test]
@@ -698,7 +727,10 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 3); // Initial + 2 retries
-        assert!(result.unwrap_err().to_string().contains("Connection timeout"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Connection timeout"));
     }
 
     #[tokio::test]
@@ -844,7 +876,7 @@ mod tests {
     #[test]
     fn test_retry_policy_default() {
         let policy = RetryPolicy::default();
-        
+
         assert_eq!(policy.retry_on.len(), 4);
         assert!(policy.retry_on.contains(&ErrorType::NetworkTimeout));
         assert!(policy.retry_on.contains(&ErrorType::ConnectionReset));
@@ -905,10 +937,10 @@ mod tests {
             Duration::from_millis(5000),
             Duration::from_secs(5),
         );
-        
+
         let delay0 = retry_manager.calculate_delay(0);
         let delay1 = retry_manager.calculate_delay(1);
-        
+
         // With exponential backoff and base 1000ms (from strategy)
         assert_eq!(delay0, Duration::from_millis(1000));
         assert_eq!(delay1, Duration::from_millis(2000));
@@ -946,19 +978,20 @@ mod tests {
             retry_on: vec![ErrorType::ChunkReadFailed],
             backoff_strategy: BackoffStrategy::Linear { increment: 100 },
         };
-        
+
         let retry_manager = RetryManager::with_config(
             2,
             Duration::from_millis(200),
             Duration::from_millis(1000),
             Duration::from_secs(5),
-        ).with_policy(custom_policy);
-        
+        )
+        .with_policy(custom_policy);
+
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
         let start_time = std::time::Instant::now();
-        
+
         let result = retry_manager
             .execute_with_retry(|| {
                 let counter = counter_clone.clone();
@@ -974,11 +1007,11 @@ mod tests {
             .await;
 
         let elapsed = start_time.elapsed();
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 100);
         assert_eq!(counter.load(Ordering::SeqCst), 3);
-        
+
         // Verify delays were applied (should be at least 200ms + 300ms = 500ms)
         assert!(elapsed >= Duration::from_millis(500));
     }

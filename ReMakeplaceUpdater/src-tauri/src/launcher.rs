@@ -1,18 +1,18 @@
+use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
-use anyhow::{Result, Context};
 
 pub struct Launcher;
 
 impl Launcher {
-    pub async fn launch_game(
-        installation_path: &Path,
-        exe_name: &str,
-    ) -> Result<()> {
+    pub async fn launch_game(installation_path: &Path, exe_name: &str) -> Result<()> {
         let exe_path = installation_path.join(exe_name);
-        
+
         if !Self::validate_executable(&exe_path)? {
-            return Err(anyhow::anyhow!("Executable not found: {}", exe_path.display()));
+            return Err(anyhow::anyhow!(
+                "Executable not found: {}",
+                exe_path.display()
+            ));
         }
 
         // Launch the game as a detached process
@@ -50,10 +50,10 @@ impl Launcher {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let metadata = std::fs::metadata(exe_path)
-                .context("Failed to get executable metadata")?;
+            let metadata =
+                std::fs::metadata(exe_path).context("Failed to get executable metadata")?;
             let permissions = metadata.permissions();
-            
+
             // Check if owner has execute permission
             Ok(permissions.mode() & 0o100 != 0)
         }
@@ -61,12 +61,11 @@ impl Launcher {
         #[cfg(windows)]
         {
             // On Windows, check if it's a .exe file
-            Ok(exe_path.extension()
+            Ok(exe_path
+                .extension()
                 .and_then(|ext| ext.to_str())
                 .map(|ext| ext.to_lowercase() == "exe")
                 .unwrap_or(false))
         }
     }
-
-
-} 
+}

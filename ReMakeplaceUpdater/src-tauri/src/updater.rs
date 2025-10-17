@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use anyhow::{Result, Context};
 use crate::config::Config;
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateInfo {
@@ -27,12 +27,11 @@ impl UpdateManager {
     pub async fn check_for_updates(config: &Config) -> Result<UpdateInfo> {
         let latest_release = Self::get_latest_release(&config.update_check_url).await?;
         let latest_version = latest_release.tag_name.trim_start_matches('v').to_string();
-        
+
         let is_available = Self::compare_versions(&config.current_version, &latest_version)?;
-        
+
         let download_url = if is_available {
-            Self::find_7z_asset(&latest_release.assets)
-                .unwrap_or_else(|| "".to_string())
+            Self::find_7z_asset(&latest_release.assets).unwrap_or_else(|| "".to_string())
         } else {
             "".to_string()
         };
@@ -45,11 +44,11 @@ impl UpdateManager {
     }
 
     pub fn compare_versions(current: &str, latest: &str) -> Result<bool> {
-        let current_version = semver::Version::parse(current)
-            .context("Failed to parse current version")?;
-        let latest_version = semver::Version::parse(latest)
-            .context("Failed to parse latest version")?;
-        
+        let current_version =
+            semver::Version::parse(current).context("Failed to parse current version")?;
+        let latest_version =
+            semver::Version::parse(latest).context("Failed to parse latest version")?;
+
         Ok(latest_version > current_version)
     }
 
@@ -63,7 +62,10 @@ impl UpdateManager {
             .context("Failed to fetch latest release")?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("GitHub API returned status: {}", response.status()));
+            return Err(anyhow::anyhow!(
+                "GitHub API returned status: {}",
+                response.status()
+            ));
         }
 
         let release: GitHubRelease = response
@@ -82,7 +84,7 @@ impl UpdateManager {
                 return Some(asset.browser_download_url.clone());
             }
         }
-        
+
         // Fallback to .zip files
         for asset in assets {
             if asset.name.ends_with(".zip") {
@@ -90,7 +92,7 @@ impl UpdateManager {
                 return Some(asset.browser_download_url.clone());
             }
         }
-        
+
         // Additional fallbacks for other supported formats
         for asset in assets {
             if asset.name.ends_with(".tar.gz") || asset.name.ends_with(".tgz") {
@@ -98,20 +100,20 @@ impl UpdateManager {
                 return Some(asset.browser_download_url.clone());
             }
         }
-        
+
         for asset in assets {
             if asset.name.ends_with(".tar.zst") || asset.name.ends_with(".tar.zstd") {
                 println!("Found .tar.zst asset (fallback): {}", asset.name);
                 return Some(asset.browser_download_url.clone());
             }
         }
-        
+
         // Log what assets are available for debugging
         println!("No supported archive format found. Available assets:");
         for asset in assets {
             println!("  - {}", asset.name);
         }
-        
+
         None
     }
-} 
+}

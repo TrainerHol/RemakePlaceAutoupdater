@@ -2,7 +2,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tauri::{Emitter};
+use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 use tauri_plugin_deep_link;
@@ -450,23 +450,24 @@ pub fn run() {
             }
             Ok(())
         })
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_deep_link::init())
+        // Single Instance should be the first plugin registered
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-            let _ = app.emit_all("single-instance", &serde_json::json!({
+            let _ = app.emit("single-instance", &serde_json::json!({
                 "argv": args,
                 "cwd": cwd,
             }));
-            if let Some(win) = app.get_window("main") {
+            if let Some(win) = app.get_webview_window("main") {
                 let _ = win.set_focus();
                 let _ = win.unminimize();
                 let _ = win.show();
             }
         }))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             #[cfg(any(target_os = "linux", target_os = "windows"))]
