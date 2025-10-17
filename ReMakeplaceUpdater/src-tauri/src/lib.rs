@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tauri::{Emitter, Manager};
-use tauri::ipc::RemoteDomainAccessScope;
 use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 use tauri_plugin_deep_link;
@@ -479,10 +478,8 @@ pub fn run() {
                     eprintln!("Deep link register_all failed: {}", e);
                 }
             }
-            // Allow loading file images via convertFileSrc (asset.localhost)
-            app.ipc_scope().configure_remote_access(
-                RemoteDomainAccessScope::new("asset.localhost").add_window("main")
-            );
+            // Allow loading file images via convertFileSrc on asset.localhost
+            // Tauri v2 maps convertFileSrc to asset.localhost automatically; no extra config needed here.
             Ok(())
         })
         .manage(Arc::new(Mutex::new(app_state)))
@@ -506,7 +503,8 @@ pub fn run() {
             handle_deep_link,
             list_gallery,
             reveal_path,
-            delete_gallery_entry
+            delete_gallery_entry,
+            get_image_data_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -620,4 +618,23 @@ async fn reveal_path(app: tauri::AppHandle, path: String) -> Result<(), String> 
         let _ = shell.command("xdg-open").args([std::path::Path::new(&path).parent().and_then(|p| p.to_str()).unwrap_or(".")]).spawn();
         return Ok(());
     }
+}
+
+#[tauri::command]
+async fn get_image_data_url(path: String) -> Result<String, String> {
+    use std::fs;
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    let ext = std::path::Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        _ => "image/jpeg",
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:{};base64,{}", mime, b64))
 }

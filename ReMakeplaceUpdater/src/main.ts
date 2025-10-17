@@ -422,6 +422,7 @@ class ReMakeplaceUpdater {
       const list = items as Array<any>;
       grid.innerHTML = list
         .map((it) => {
+          // Try convertFileSrc; if it fails at runtime we can fall back to a data URL
           const src = it.image_path ? convertFileSrc(it.image_path) : null;
           const img = src ? `<img src="${src}" alt="" class="thumb" crossorigin="anonymous"/>` : `<div class="thumb placeholder"></div>`;
           return `
@@ -489,6 +490,23 @@ class ReMakeplaceUpdater {
           grid.style.display = "grid";
         }
       }
+
+      // If any images failed due to asset host restrictions, replace with data URLs
+      grid.querySelectorAll<HTMLImageElement>("img.thumb").forEach(async (imgEl) => {
+        if (!imgEl.complete || imgEl.naturalWidth > 0) return;
+        const card = imgEl.closest(".card");
+        const jsonBtn = card?.querySelector<HTMLElement>(".open-folder");
+        const json = jsonBtn?.getAttribute("data-json");
+        // We don't have image path attached, so fetch data URL by index using list
+        const idx = Array.from(grid.children).indexOf(card as Element);
+        const item = list[idx];
+        if (item?.image_path) {
+          try {
+            const dataUrl = await invoke<string>("get_image_data_url", { path: item.image_path });
+            imgEl.src = dataUrl;
+          } catch {}
+        }
+      });
     } catch (e) {
       console.error("Failed to load gallery:", e);
     }
