@@ -7,6 +7,7 @@ use tauri_plugin_opener::OpenerExt;
 use anyhow::Context;
 use tauri_plugin_deep_link;
 use url::Url;
+use tauri_plugin_notification::NotificationExt;
 use base64::{engine::general_purpose, Engine as _};
 mod gallery;
 mod companion;
@@ -497,7 +498,9 @@ async fn handle_deep_link(app: tauri::AppHandle, url: String) -> Result<(), Stri
 
     match companion::import_design(&config, payload).await {
         Ok((json_path, _image)) => {
-            let _ = tauri_plugin_notification::Notification::new(&app)
+            let _ = app
+                .notification()
+                .builder()
                 .title("MakePlace")
                 .body(format!("Design has been added ({}).", json_path))
                 .show();
