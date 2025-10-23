@@ -87,7 +87,12 @@ pub fn list_entries() -> Result<Vec<GalleryItemDto>> {
 }
 
 pub fn get_images_dir() -> PathBuf {
-    let dir = get_app_data_dir().join("images");
+    // Store images alongside config.json (EXE directory)/gallery/images
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let dir = exe_dir.join("gallery").join("images");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }

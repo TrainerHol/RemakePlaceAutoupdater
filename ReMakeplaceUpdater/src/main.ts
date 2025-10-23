@@ -422,7 +422,7 @@ class ReMakeplaceUpdater {
       const list = items as Array<any>;
       grid.innerHTML = list
         .map((it) => {
-          // Try convertFileSrc; if it fails at runtime we can fall back to a data URL
+          // Use direct file paths now that images are stored next to the EXE
           const src = it.image_path ? convertFileSrc(it.image_path) : null;
           const img = src ? `<img src="${src}" alt="" class="thumb" crossorigin="anonymous"/>` : `<div class="thumb placeholder"></div>`;
           return `
@@ -491,20 +491,26 @@ class ReMakeplaceUpdater {
         }
       }
 
-      // If any images failed due to asset host restrictions, replace with data URLs
-      grid.querySelectorAll<HTMLImageElement>("img.thumb").forEach(async (imgEl) => {
-        if (!imgEl.complete || imgEl.naturalWidth > 0) return;
-        const card = imgEl.closest(".card");
-        const jsonBtn = card?.querySelector<HTMLElement>(".open-folder");
-        const json = jsonBtn?.getAttribute("data-json");
-        // We don't have image path attached, so fetch data URL by index using list
-        const idx = Array.from(grid.children).indexOf(card as Element);
-        const item = list[idx];
-        if (item?.image_path) {
-          try {
-            const dataUrl = await invoke<string>("get_image_data_url", { path: item.image_path });
-            imgEl.src = dataUrl;
-          } catch {}
+      // Fallback: if an image fails, replace with data URL read via backend
+      grid.querySelectorAll<HTMLImageElement>("img.thumb").forEach((imgEl) => {
+        const fallback = async () => {
+          const card = imgEl.closest(".card");
+          const idx = card ? Array.from(grid.children).indexOf(card as Element) : -1;
+          const item = idx >= 0 ? list[idx] : null;
+          if (item?.image_path) {
+            try {
+              const dataUrl = await invoke<string>("get_image_data_url", { path: item.image_path });
+              imgEl.src = dataUrl;
+            } catch {}
+          }
+        };
+
+        imgEl.addEventListener("error", () => {
+          void fallback();
+        });
+
+        if (imgEl.complete && imgEl.naturalWidth === 0) {
+          void fallback();
         }
       });
     } catch (e) {
