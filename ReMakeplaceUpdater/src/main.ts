@@ -18,6 +18,7 @@ class ReMakeplaceUpdater {
   private statusMessage!: HTMLElement;
   private currentVersionElement!: HTMLElement;
   private latestVersionElement!: HTMLElement;
+  private releaseNotesElement!: HTMLElement;
   private installationPathElement!: HTMLElement;
   private progressBar!: HTMLElement;
   private progressText!: HTMLElement;
@@ -68,7 +69,10 @@ class ReMakeplaceUpdater {
               </div>
               <div class="version-item">
                 <span class="version-label">Latest Version:</span>
-                <span id="latest-version" class="version-text">Checking...</span>
+                <p>
+                  <span id="latest-version" class="version-text">Checking...</span>
+                  <span id="releaseNotes" class="release-notes" title="Link to release notes"></span>
+                </p>
               </div>
             </div>
             <div id="status-message" class="status-message">Initializing...</div>
@@ -182,6 +186,7 @@ class ReMakeplaceUpdater {
     this.statusMessage = document.getElementById("status-message")!;
     this.currentVersionElement = document.getElementById("current-version")!;
     this.latestVersionElement = document.getElementById("latest-version")!;
+    this.releaseNotesElement = document.getElementById("releaseNotes")!;
     this.installationPathElement = document.getElementById("installation-path")!;
     this.progressBar = document.getElementById("progress-bar")!;
     this.progressText = document.getElementById("progress-text")!;
@@ -606,11 +611,27 @@ class ReMakeplaceUpdater {
         this.updateButton.disabled = true;
         this.updateButton.classList.remove("btn-update");
       }
+
+      this.createReleaseNotesLink();
+
     } catch (error) {
       this.setStatus(AppState.ERROR, `Failed to check updates: ${error}`);
       this.updateButton.disabled = false;
       this.updateButton.textContent = "Retry";
     }
+  }
+
+  createReleaseNotesLink() {
+    if (!this.updateInfo) return;
+
+    const link = document.createElement("a");
+    link.href = `https://github.com/RemakePlace/app/releases/tag/${this.updateInfo.latest_version}`;
+    link.textContent = "ⓘ";
+    link.target = "_blank";
+    link.style.cssText = "color: inherit; text-decoration: none;";
+    link.onmouseenter = () => link.style.opacity = "0.6";
+    link.onmouseleave = () => link.style.opacity = "1";
+    this.releaseNotesElement.appendChild(link);
   }
 
   private async startUpdate() {
