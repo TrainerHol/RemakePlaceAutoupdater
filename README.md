@@ -152,6 +152,7 @@ For advanced users, the `config.json` file can be manually edited:
   "exe_path": "Makeplace.exe",
   "preserve_folders": ["Makeplace/Custom", "Makeplace/Save"], // Also preserves config.json
   "update_check_url": "https://api.github.com/repos/RemakePlace/app/releases/latest",
+  "release_page_url": "https://github.com/RemakePlace/app/releases/latest",
   "last_check": "2024-01-01T00:00:00Z",
   "auto_check": true,
   "installation_mode": "update"

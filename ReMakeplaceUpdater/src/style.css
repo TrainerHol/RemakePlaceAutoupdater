@@ -330,6 +330,13 @@ body {
   font-size: 18px;
 }
 
+.release-notes {
+  color: #ff8c42;
+  font-weight: 700;
+  font-size: 18px;
+  margin-left: 2px;
+}
+
 /* Status Message */
 .status-message {
   padding: 12px;

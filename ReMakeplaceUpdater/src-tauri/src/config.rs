@@ -12,6 +12,7 @@ pub struct Config {
     pub exe_path: String,
     pub preserve_folders: Vec<String>,
     pub update_check_url: String,
+    pub release_page_url: String,
     pub last_check: String,
     pub auto_check: bool,
     #[serde(default = "default_installation_mode")]
@@ -65,7 +66,8 @@ impl ConfigManager {
             installation_path: String::new(),
             exe_path: "Makeplace.exe".to_string(),
             preserve_folders: vec!["Makeplace/Custom".to_string(), "Makeplace/Save".to_string()],
-            update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest",
+            update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest"
+                .to_string(),
             release_page_url: "https://github.com/RemakePlace/app/releases/latest"
                 .to_string(),
             last_check: chrono::Utc::now().to_rfc3339(),
