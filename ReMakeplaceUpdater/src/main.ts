@@ -622,10 +622,8 @@ class ReMakeplaceUpdater {
   }
 
   createReleaseNotesLink() {
-    if (!this.updateInfo) return;
-
     const link = document.createElement("a");
-    link.href = `https://github.com/RemakePlace/app/releases/tag/${this.updateInfo.latest_version}`;
+    link.href = `${this.config?.update_check_url}`;
     link.textContent = "ⓘ";
     link.target = "_blank";
     link.style.cssText = "color: inherit; text-decoration: none;";
