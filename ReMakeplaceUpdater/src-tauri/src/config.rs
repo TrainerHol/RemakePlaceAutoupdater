@@ -65,7 +65,8 @@ impl ConfigManager {
             installation_path: String::new(),
             exe_path: "Makeplace.exe".to_string(),
             preserve_folders: vec!["Makeplace/Custom".to_string(), "Makeplace/Save".to_string()],
-            update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest"
+            update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest",
+            release_page_url: "https://github.com/RemakePlace/app/releases/latest"
                 .to_string(),
             last_check: chrono::Utc::now().to_rfc3339(),
             auto_check: true,

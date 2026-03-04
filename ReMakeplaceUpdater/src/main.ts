@@ -623,7 +623,7 @@ class ReMakeplaceUpdater {
 
   createReleaseNotesLink() {
     const link = document.createElement("a");
-    link.href = `${this.config?.update_check_url}`;
+    link.href = `${this.config?.release_page_url}`;
     link.textContent = "ⓘ";
     link.target = "_blank";
     link.style.cssText = "color: inherit; text-decoration: none;";

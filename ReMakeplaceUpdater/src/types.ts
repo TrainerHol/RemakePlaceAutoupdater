@@ -7,6 +7,7 @@ export interface Config {
   exe_path: string;
   preserve_folders: string[];
   update_check_url: string;
+  release_page_url: string;
   last_check: string;
   auto_check: boolean;
   installation_mode: InstallationMode;
