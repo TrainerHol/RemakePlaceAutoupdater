@@ -284,20 +284,19 @@ async fn install_update(
         }
 
         let _ = app_handle.emit("status-update", "Validating extracted files...");
-        let install_root = match ConfigManager::find_installation_root(
-            &staging_dir,
-            &config.exe_path,
-        ) {
-            Some(root) => root,
-            None => {
-                let _ = cleanup_dir(&staging_dir).await;
-                let _ = app_handle.emit(
-                    "error",
-                    "Extraction failed: the archive did not contain Makeplace.exe and MakePlace/Content.",
-                );
-                return;
-            }
-        };
+        let install_root =
+            match ConfigManager::find_installation_root(&staging_dir, &config.exe_path) {
+                Some(root) => root,
+                None => {
+                    let _ = cleanup_dir(&staging_dir).await;
+                    let message = format!(
+                        "Extraction failed: the archive did not contain {} and MakePlace/Content.",
+                        config.exe_path
+                    );
+                    let _ = app_handle.emit("error", &message);
+                    return;
+                }
+            };
 
         if let Err(e) =
             ConfigManager::validate_installation_structure(&install_root, &config.exe_path)

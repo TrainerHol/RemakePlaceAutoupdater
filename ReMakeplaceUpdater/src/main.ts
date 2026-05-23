@@ -74,6 +74,7 @@ class ReMakeplaceUpdater {
   private statusMessage!: HTMLElement;
   private currentVersionElement!: HTMLElement;
   private latestVersionElement!: HTMLElement;
+  private releaseNotesButton!: HTMLButtonElement;
   private installationPathElement!: HTMLElement;
   private validationStatusElement!: HTMLElement;
   private progressBar!: HTMLElement;
@@ -133,7 +134,12 @@ class ReMakeplaceUpdater {
               </div>
               <div class="version-item">
                 <span class="version-label">Latest Version:</span>
-                <span id="latest-version" class="version-text">Checking...</span>
+                <div class="version-value-row">
+                  <span id="latest-version" class="version-text">Checking...</span>
+                  <button id="release-notes-btn" class="release-notes-trigger" hidden title="View release notes" aria-label="View release notes">
+                    <i data-lucide="file-text"></i>
+                  </button>
+                </div>
               </div>
             </div>
             <div id="status-message" class="status-message">Initializing...</div>
@@ -264,6 +270,21 @@ class ReMakeplaceUpdater {
             </div>
           </div>
         </div>
+
+        <!-- Release Notes Modal (hidden by default) -->
+        <div id="release-notes-modal" class="modal" style="display: none;">
+          <div class="modal-content release-notes-modal">
+            <div class="modal-header">
+              <h2 id="release-notes-title">Release Notes</h2>
+              <div id="release-notes-subtitle" class="release-notes-subtitle"></div>
+            </div>
+            <div id="release-notes-content" class="modal-body release-notes-markdown"></div>
+            <div class="modal-footer">
+              <button id="release-notes-open-browser" class="btn btn-secondary" title="Open the GitHub release page"><i data-lucide="external-link"></i><span>GitHub Release</span></button>
+              <button id="release-notes-close" class="btn btn-primary"><i data-lucide="x"></i><span>Close</span></button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
 
@@ -271,6 +292,7 @@ class ReMakeplaceUpdater {
     this.statusMessage = document.getElementById("status-message")!;
     this.currentVersionElement = document.getElementById("current-version")!;
     this.latestVersionElement = document.getElementById("latest-version")!;
+    this.releaseNotesButton = document.getElementById("release-notes-btn") as HTMLButtonElement;
     this.installationPathElement = document.getElementById("installation-path")!;
     this.validationStatusElement = document.getElementById("validation-status")!;
     this.progressBar = document.getElementById("progress-bar")!;
@@ -658,6 +680,10 @@ class ReMakeplaceUpdater {
       this.launchGame();
     });
 
+    this.releaseNotesButton.addEventListener("click", () => {
+      this.showReleaseNotes();
+    });
+
     this.settingsButton.addEventListener("click", () => {
       this.showSettings();
     });
@@ -695,6 +721,31 @@ class ReMakeplaceUpdater {
 
     saveBtn.addEventListener("click", () => {
       this.savePath(pathInput.value);
+    });
+
+    const releaseNotesModal = document.getElementById("release-notes-modal")!;
+    const releaseNotesClose = document.getElementById("release-notes-close")!;
+    const releaseNotesOpenBrowser = document.getElementById("release-notes-open-browser") as HTMLButtonElement;
+
+    releaseNotesClose.addEventListener("click", () => {
+      this.hideReleaseNotes();
+    });
+
+    releaseNotesOpenBrowser.addEventListener("click", async () => {
+      const url = this.updateInfo?.release_url?.trim();
+      if (!url) return;
+
+      try {
+        await invoke("open_url", { url });
+      } catch (error) {
+        console.error("Failed to open release notes:", error);
+      }
+    });
+
+    releaseNotesModal.addEventListener("click", (e) => {
+      if (e.target === releaseNotesModal) {
+        this.hideReleaseNotes();
+      }
     });
 
     // Close modal when clicking outside
@@ -899,6 +950,278 @@ class ReMakeplaceUpdater {
     }
   }
 
+  private updateReleaseNotesButton() {
+    const hasReleaseNotes = !!(this.updateInfo?.release_notes?.trim() || this.updateInfo?.release_url?.trim());
+    const version = this.updateInfo?.latest_version?.trim();
+    this.releaseNotesButton.hidden = !hasReleaseNotes;
+    this.releaseNotesButton.disabled = !hasReleaseNotes;
+    this.releaseNotesButton.title = version ? `View release notes for ReMakeplace ${version}` : "View release notes";
+    this.releaseNotesButton.setAttribute("aria-label", this.releaseNotesButton.title);
+  }
+
+  private showReleaseNotes() {
+    if (!this.updateInfo) return;
+
+    const modal = document.getElementById("release-notes-modal")!;
+    const title = document.getElementById("release-notes-title")!;
+    const subtitle = document.getElementById("release-notes-subtitle")!;
+    const content = document.getElementById("release-notes-content")!;
+    const openBrowser = document.getElementById("release-notes-open-browser") as HTMLButtonElement;
+
+    title.textContent = "Release Notes";
+    subtitle.textContent = `ReMakeplace ${this.updateInfo.latest_version}`;
+    openBrowser.hidden = !this.updateInfo.release_url?.trim();
+
+    const notes = this.updateInfo.release_notes?.trim();
+    content.innerHTML = notes
+      ? this.renderReleaseNotesMarkdown(notes)
+      : '<p class="release-notes-empty">No release notes were provided for this release.</p>';
+    this.wireReleaseNotesLinks(content);
+
+    modal.style.display = "flex";
+    this.renderIcons();
+  }
+
+  private hideReleaseNotes() {
+    const modal = document.getElementById("release-notes-modal")!;
+    modal.style.display = "none";
+  }
+
+  private wireReleaseNotesLinks(container: HTMLElement) {
+    container.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((link) => {
+      link.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const url = link.href;
+        if (!url) return;
+
+        try {
+          await invoke("open_url", { url });
+        } catch (error) {
+          console.error("Failed to open release note link:", error);
+        }
+      });
+    });
+  }
+
+  private renderReleaseNotesMarkdown(markdown: string): string {
+    const lines = markdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    const html: string[] = [];
+    let index = 0;
+    let listType: "ul" | "ol" | null = null;
+    let inCodeBlock = false;
+    let codeLanguage = "";
+    let codeLines: string[] = [];
+
+    const closeList = () => {
+      if (listType) {
+        html.push(`</${listType}>`);
+        listType = null;
+      }
+    };
+
+    const flushCodeBlock = () => {
+      const languageClass = codeLanguage ? ` language-${this.escapeAttribute(codeLanguage)}` : "";
+      html.push(`<pre class="release-notes-code${languageClass}"><code>${this.escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      inCodeBlock = false;
+      codeLanguage = "";
+      codeLines = [];
+    };
+
+    while (index < lines.length) {
+      const rawLine = lines[index];
+      const trimmed = rawLine.trim();
+
+      if (inCodeBlock) {
+        if (trimmed.startsWith("```")) {
+          flushCodeBlock();
+        } else {
+          codeLines.push(rawLine);
+        }
+        index += 1;
+        continue;
+      }
+
+      if (!trimmed) {
+        closeList();
+        index += 1;
+        continue;
+      }
+
+      const fenceMatch = trimmed.match(/^```([\w-]+)?/);
+      if (fenceMatch) {
+        closeList();
+        inCodeBlock = true;
+        codeLanguage = fenceMatch[1] || "";
+        codeLines = [];
+        index += 1;
+        continue;
+      }
+
+      if (/^<details>$/i.test(trimmed)) {
+        closeList();
+        html.push('<details class="release-notes-details">');
+        index += 1;
+        continue;
+      }
+
+      if (/^<\/details>$/i.test(trimmed)) {
+        closeList();
+        html.push("</details>");
+        index += 1;
+        continue;
+      }
+
+      if (/^<summary>$/i.test(trimmed)) {
+        closeList();
+        index += 1;
+        const summaryParts: string[] = [];
+        while (index < lines.length && !/^<\/summary>$/i.test(lines[index].trim())) {
+          const summaryLine = lines[index].trim();
+          if (summaryLine) {
+            const heading = summaryLine.match(/^<h([1-6])>(.*?)<\/h\1>$/i);
+            summaryParts.push(heading ? heading[2] : summaryLine);
+          }
+          index += 1;
+        }
+        if (index < lines.length) index += 1;
+        html.push(`<summary>${this.renderReleaseNotesInline(summaryParts.join(" ") || "Details")}</summary>`);
+        continue;
+      }
+
+      const htmlHeading = trimmed.match(/^<h([1-6])>(.*?)<\/h\1>$/i);
+      if (htmlHeading) {
+        closeList();
+        const level = Math.min(Number(htmlHeading[1]) + 1, 6);
+        html.push(`<h${level}>${this.renderReleaseNotesInline(htmlHeading[2])}</h${level}>`);
+        index += 1;
+        continue;
+      }
+
+      const markdownHeading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+      if (markdownHeading) {
+        closeList();
+        const level = Math.min(markdownHeading[1].length + 1, 6);
+        html.push(`<h${level}>${this.renderReleaseNotesInline(markdownHeading[2])}</h${level}>`);
+        index += 1;
+        continue;
+      }
+
+      if (/^[-*_]{3,}$/.test(trimmed)) {
+        closeList();
+        html.push("<hr>");
+        index += 1;
+        continue;
+      }
+
+      if (/^>\s?/.test(trimmed)) {
+        closeList();
+        const quoteLines: string[] = [];
+        while (index < lines.length) {
+          const quoteLine = lines[index].trim();
+          const match = quoteLine.match(/^>\s?(.*)$/);
+          if (!match) break;
+          quoteLines.push(match[1]);
+          index += 1;
+        }
+
+        const alertMatch = quoteLines[0]?.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]$/i);
+        if (alertMatch) {
+          const tone = alertMatch[1].toLowerCase();
+          const label = alertMatch[1][0].toUpperCase() + alertMatch[1].slice(1).toLowerCase();
+          const body = quoteLines.slice(1).filter(Boolean).map((line) => this.renderReleaseNotesInline(line)).join("<br>");
+          html.push(`<div class="release-notes-callout release-notes-callout-${tone}"><div class="release-notes-callout-title">${this.escapeHtml(label)}</div><div>${body}</div></div>`);
+        } else {
+          const body = quoteLines.map((line) => this.renderReleaseNotesInline(line)).join("<br>");
+          html.push(`<blockquote>${body}</blockquote>`);
+        }
+        continue;
+      }
+
+      const unorderedItem = rawLine.match(/^\s*[-*+]\s+(.+)$/);
+      const orderedItem = rawLine.match(/^\s*\d+\.\s+(.+)$/);
+      if (unorderedItem || orderedItem) {
+        const nextListType = unorderedItem ? "ul" : "ol";
+        if (listType !== nextListType) {
+          closeList();
+          html.push(`<${nextListType}>`);
+          listType = nextListType;
+        }
+        html.push(`<li>${this.renderReleaseNotesInline((unorderedItem || orderedItem)![1])}</li>`);
+        index += 1;
+        continue;
+      }
+
+      closeList();
+      const paragraphLines = [trimmed];
+      index += 1;
+      while (index < lines.length) {
+        const next = lines[index].trim();
+        if (!next || this.isReleaseNotesBlockStart(next)) break;
+        paragraphLines.push(next);
+        index += 1;
+      }
+      html.push(`<p>${this.renderReleaseNotesInline(paragraphLines.join(" "))}</p>`);
+    }
+
+    closeList();
+    if (inCodeBlock) flushCodeBlock();
+
+    return html.join("\n");
+  }
+
+  private isReleaseNotesBlockStart(line: string): boolean {
+    return /^```/.test(line)
+      || /^#{1,6}\s+/.test(line)
+      || /^<\/*(details|summary)>$/i.test(line)
+      || /^<h[1-6]>.*<\/h[1-6]>$/i.test(line)
+      || /^>\s?/.test(line)
+      || /^[-*_]{3,}$/.test(line)
+      || /^\s*[-*+]\s+/.test(line)
+      || /^\s*\d+\.\s+/.test(line);
+  }
+
+  private renderReleaseNotesInline(value: string): string {
+    let output = this.escapeHtml(value);
+
+    output = output.replace(/\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)/g, (_match, alt: string, _imageUrl: string, linkUrl: string) => {
+      return this.renderEscapedMarkdownLink(alt || linkUrl, linkUrl);
+    });
+
+    output = output.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt: string, imageUrl: string) => {
+      const safeUrl = this.getSafeMarkdownUrl(imageUrl);
+      if (!safeUrl) return alt || "";
+      return `<img class="release-notes-inline-image" src="${this.escapeAttribute(safeUrl)}" alt="${this.escapeAttribute(alt)}" loading="lazy">`;
+    });
+
+    output = output.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, url: string) => {
+      return this.renderEscapedMarkdownLink(label, url);
+    });
+
+    output = output.replace(/`([^`]+)`/g, "<code>$1</code>");
+    output = output.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    output = output.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+    output = output.replace(/(^|[\s(])\*([^*]+)\*/g, "$1<em>$2</em>");
+    output = output.replace(/(^|[\s(])_([^_]+)_/g, "$1<em>$2</em>");
+
+    return output;
+  }
+
+  private renderEscapedMarkdownLink(label: string, url: string): string {
+    const safeUrl = this.getSafeMarkdownUrl(url);
+    if (!safeUrl) return label;
+    return `<a href="${this.escapeAttribute(safeUrl)}">${label}</a>`;
+  }
+
+  private getSafeMarkdownUrl(url: string): string | null {
+    const normalized = url.replace(/&amp;/g, "&").trim();
+    try {
+      const parsed = new URL(normalized);
+      return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+
   private updateUI() {
     if (!this.config) return;
 
@@ -985,6 +1308,7 @@ class ReMakeplaceUpdater {
     try {
       this.updateInfo = await invoke<UpdateInfo>("check_updates", { config: this.config });
       this.latestVersionElement.textContent = this.updateInfo.latest_version;
+      this.updateReleaseNotesButton();
       this.updateButton.classList.remove("btn-update", "btn-install");
 
       if (!this.updateInfo.download_url) {
@@ -1018,6 +1342,8 @@ class ReMakeplaceUpdater {
         this.updateButton.classList.remove("btn-update");
       }
     } catch (error) {
+      this.updateInfo = null;
+      this.updateReleaseNotesButton();
       this.setStatus(AppState.ERROR, `Failed to check updates: ${error}`);
       this.updateButton.hidden = false;
       this.updateButton.disabled = false;
@@ -1261,14 +1587,14 @@ class ReMakeplaceUpdater {
     try {
       const detection = await invoke<InstallationDetection>("detect_installation", {
         path: path,
-        exeName: this.config?.exe_path || "Makeplace.exe",
+        exeName: this.config?.exe_path || "MakePlace.exe",
       });
 
       // Validate with detailed error information
       try {
         await invoke<string>("validate_path_detailed", {
           path: path,
-          exeName: this.config?.exe_path || "Makeplace.exe",
+          exeName: this.config?.exe_path || "MakePlace.exe",
           mode: detection.mode,
         });
 

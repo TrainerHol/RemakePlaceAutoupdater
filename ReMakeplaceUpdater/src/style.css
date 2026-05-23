@@ -277,6 +277,51 @@ button {
   text-shadow: 0 0 18px rgba(255, 174, 95, 0.18);
 }
 
+.version-value-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.version-value-row .version-text {
+  margin-top: 0;
+}
+
+.release-notes-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(91, 209, 232, 0.36);
+  border-radius: 7px;
+  background: rgba(91, 209, 232, 0.08);
+  color: #b9f3fb;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.release-notes-trigger svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.2;
+}
+
+.release-notes-trigger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(91, 209, 232, 0.68);
+  background: rgba(91, 209, 232, 0.14);
+  box-shadow: var(--glow-cyan);
+}
+
+.release-notes-trigger:disabled {
+  opacity: 0.54;
+  cursor: not-allowed;
+}
+
 .version-text.version-unverified {
   color: var(--yellow);
   text-shadow: 0 0 16px rgba(255, 211, 111, 0.16);
@@ -1088,6 +1133,165 @@ button {
   white-space: pre-line;
 }
 
+.release-notes-modal {
+  width: min(780px, 100%);
+}
+
+.release-notes-subtitle {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.release-notes-markdown {
+  display: block;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.release-notes-markdown h2,
+.release-notes-markdown h3,
+.release-notes-markdown h4,
+.release-notes-markdown h5,
+.release-notes-markdown h6 {
+  margin: 20px 0 8px;
+  color: var(--text);
+  font-weight: 780;
+  line-height: 1.2;
+}
+
+.release-notes-markdown h2:first-child,
+.release-notes-markdown h3:first-child {
+  margin-top: 0;
+}
+
+.release-notes-markdown h2 {
+  font-size: 20px;
+}
+
+.release-notes-markdown h3 {
+  font-size: 17px;
+}
+
+.release-notes-markdown h4,
+.release-notes-markdown h5,
+.release-notes-markdown h6 {
+  font-size: 15px;
+}
+
+.release-notes-markdown p,
+.release-notes-markdown ul,
+.release-notes-markdown ol,
+.release-notes-markdown blockquote,
+.release-notes-code,
+.release-notes-details,
+.release-notes-callout {
+  margin: 10px 0;
+}
+
+.release-notes-markdown ul,
+.release-notes-markdown ol {
+  padding-left: 22px;
+}
+
+.release-notes-markdown li {
+  margin: 5px 0;
+}
+
+.release-notes-markdown a {
+  color: #8de5f4;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.release-notes-markdown a:hover {
+  color: #b9f3fb;
+  text-decoration: underline;
+}
+
+.release-notes-markdown code {
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  background: rgba(6, 8, 11, 0.65);
+  color: #ffd69d;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.release-notes-code {
+  overflow-x: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(6, 8, 11, 0.68);
+}
+
+.release-notes-code code {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c9d4df;
+  white-space: pre;
+}
+
+.release-notes-details {
+  padding: 10px 12px;
+  border: 1px solid rgba(91, 209, 232, 0.26);
+  border-radius: 8px;
+  background: rgba(91, 209, 232, 0.055);
+}
+
+.release-notes-details summary {
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 760;
+}
+
+.release-notes-callout {
+  padding: 11px 12px;
+  border: 1px solid rgba(91, 209, 232, 0.32);
+  border-radius: 8px;
+  background: rgba(91, 209, 232, 0.075);
+  color: #d9fbff;
+}
+
+.release-notes-callout-important,
+.release-notes-callout-warning,
+.release-notes-callout-caution {
+  border-color: rgba(255, 211, 111, 0.36);
+  background: rgba(255, 211, 111, 0.08);
+  color: #ffe5a8;
+}
+
+.release-notes-callout-title {
+  margin-bottom: 4px;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.release-notes-markdown blockquote {
+  padding-left: 12px;
+  border-left: 3px solid rgba(255, 174, 95, 0.55);
+  color: var(--text-muted);
+}
+
+.release-notes-inline-image {
+  display: inline-block;
+  max-width: 100%;
+  max-height: 40px;
+  margin: 4px 0;
+  vertical-align: middle;
+}
+
+.release-notes-empty {
+  color: var(--text-muted);
+}
+
 *::-webkit-scrollbar {
   width: 9px;
 }
@@ -1212,6 +1416,10 @@ button {
   .btn,
   .settings-btn {
     width: 100%;
+  }
+
+  .version-value-row .btn {
+    width: auto;
   }
 
   .modal-footer {

@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+const DEFAULT_EXE_NAME: &str = "MakePlace.exe";
+const LEGACY_EXE_NAME: &str = "Makeplace.exe";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub current_version: String,
@@ -61,8 +64,11 @@ impl ConfigManager {
         if config_path.exists() {
             let content = fs::read_to_string(&config_path).context("Failed to read config.json")?;
 
-            let config: Config =
+            let mut config: Config =
                 serde_json::from_str(&content).context("Failed to parse config.json")?;
+            if Self::normalize_config(&mut config) {
+                Self::save_config(&config)?;
+            }
 
             Ok(config)
         } else {
@@ -89,7 +95,7 @@ impl ConfigManager {
             current_version: "0.0.0".to_string(),
             github_repo: "RemakePlace/app".to_string(),
             installation_path: String::new(),
-            exe_path: "Makeplace.exe".to_string(),
+            exe_path: DEFAULT_EXE_NAME.to_string(),
             preserve_folders: vec!["Makeplace/Custom".to_string(), "Makeplace/Save".to_string()],
             update_check_url: "https://api.github.com/repos/RemakePlace/app/releases/latest"
                 .to_string(),
@@ -97,6 +103,15 @@ impl ConfigManager {
             auto_check: true,
             installation_mode: InstallationMode::Update,
         }
+    }
+
+    fn normalize_config(config: &mut Config) -> bool {
+        if config.exe_path == LEGACY_EXE_NAME {
+            config.exe_path = DEFAULT_EXE_NAME.to_string();
+            return true;
+        }
+
+        false
     }
 
     pub fn validate_installation_path(path: &str, exe_name: &str, mode: &InstallationMode) -> bool {
@@ -319,7 +334,10 @@ impl ConfigManager {
             custom_path: None,
             save_path: None,
             message: "This folder is not empty and does not look like ReMakeplace.".to_string(),
-            details: vec!["Choose an empty folder for a new install or the folder that contains Makeplace.exe.".to_string()],
+            details: vec![format!(
+                "Choose an empty folder for a new install or the folder that contains {}.",
+                DEFAULT_EXE_NAME
+            )],
         }
     }
 
@@ -488,7 +506,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn create_valid_install(root: &Path) {
-        fs::write(root.join("Makeplace.exe"), "exe").unwrap();
+        fs::write(root.join(DEFAULT_EXE_NAME), "exe").unwrap();
         fs::create_dir_all(root.join("MakePlace").join("Content")).unwrap();
     }
 
@@ -512,6 +530,15 @@ mod tests {
         assert_eq!(detection.mode, InstallationMode::Update);
         assert!(detection.content_path.unwrap().contains("MakePlace"));
         assert!(detection.datasmith_path.is_none());
+    }
+
+    #[test]
+    fn normalizes_legacy_executable_name() {
+        let mut config = ConfigManager::create_default();
+        config.exe_path = LEGACY_EXE_NAME.to_string();
+
+        assert!(ConfigManager::normalize_config(&mut config));
+        assert_eq!(config.exe_path, DEFAULT_EXE_NAME);
     }
 
     #[test]

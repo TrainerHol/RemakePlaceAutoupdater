@@ -1,17 +1,18 @@
 use anyhow::{Context, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct Launcher;
 
 impl Launcher {
     pub async fn launch_game(installation_path: &Path, exe_name: &str) -> Result<()> {
-        let exe_path = installation_path.join(exe_name);
+        let exe_path = Self::resolve_executable_path(installation_path, exe_name)?;
 
         if !Self::validate_executable(&exe_path)? {
             return Err(anyhow::anyhow!(
-                "Executable not found: {}",
-                exe_path.display()
+                "Executable not found: {} in {}",
+                exe_name,
+                installation_path.display()
             ));
         }
 
@@ -46,6 +47,31 @@ impl Launcher {
         println!("Game launched with PID: {}", child.id());
 
         Ok(())
+    }
+
+    pub fn resolve_executable_path(installation_path: &Path, exe_name: &str) -> Result<PathBuf> {
+        let exact_path = installation_path.join(exe_name);
+        let wanted = Path::new(exe_name)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(exe_name)
+            .to_lowercase();
+
+        let entries = std::fs::read_dir(installation_path).with_context(|| {
+            format!(
+                "Failed to read installation directory: {}",
+                installation_path.display()
+            )
+        })?;
+
+        for entry in entries.flatten() {
+            let child_name = entry.file_name().to_string_lossy().to_lowercase();
+            if child_name == wanted {
+                return Ok(entry.path());
+            }
+        }
+
+        Ok(exact_path)
     }
 
     pub fn validate_executable(exe_path: &Path) -> Result<bool> {
@@ -110,20 +136,31 @@ impl Launcher {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    #[test]
+    fn resolves_executable_case_insensitively() {
+        let dir = TempDir::new().unwrap();
+        let actual = dir.path().join("MakePlace.exe");
+        std::fs::write(&actual, "exe").unwrap();
+
+        let resolved = Launcher::resolve_executable_path(dir.path(), "Makeplace.exe").unwrap();
+        assert_eq!(resolved, actual);
+    }
 
     #[test]
     fn non_linux_launches_executable_directly() {
-        let exe = PathBuf::from("/tmp/Makeplace.exe");
+        let exe = PathBuf::from("/tmp/MakePlace.exe");
         let (program, args) = Launcher::command_parts_for_platform("windows", &exe);
-        assert_eq!(program, "/tmp/Makeplace.exe");
+        assert_eq!(program, "/tmp/MakePlace.exe");
         assert!(args.is_empty());
     }
 
     #[test]
     fn linux_launches_through_wine_when_available() {
-        let exe = PathBuf::from("/tmp/Makeplace.exe");
+        let exe = PathBuf::from("/tmp/MakePlace.exe");
         let (program, args) = Launcher::command_parts_for_platform("linux", &exe);
         assert_eq!(program, "wine");
-        assert_eq!(args, vec!["/tmp/Makeplace.exe".to_string()]);
+        assert_eq!(args, vec!["/tmp/MakePlace.exe".to_string()]);
     }
 }

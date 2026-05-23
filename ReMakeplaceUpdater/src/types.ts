@@ -18,6 +18,8 @@ export interface UpdateInfo {
   download_url: string;
   asset_name: string;
   asset_size: number;
+  release_url: string;
+  release_notes: string;
   is_available: boolean;
 }
 

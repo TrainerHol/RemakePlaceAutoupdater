@@ -13,14 +13,14 @@ Get the latest updater from the [Releases page](https://github.com/TrainerHol/Re
 - macOS Intel: use the Intel `.dmg`, or `ReMakeplace.Autoupdater_<version>_portable_macos_x64.app.tar.gz`.
 - Linux x64: use the `.AppImage`, `.deb`, `.rpm`, or `ReMakeplace.Autoupdater_<version>_portable_linux_x64.tar.gz`.
 
-Linux users still need Wine to launch ReMakeplace, because ReMakeplace itself is a Windows executable. The updater installs and repairs the game files normally, then launches with `wine Makeplace.exe` from the selected install folder. If Wine is missing, the app shows a Wine setup error instead of reporting a missing executable.
+Linux users still need Wine to launch ReMakeplace, because ReMakeplace itself is a Windows executable. The updater installs and repairs the game files normally, then launches with `wine MakePlace.exe` from the selected install folder. If Wine is missing, the app shows a Wine setup error instead of reporting a missing executable.
 
 ## First Run
 
 When the app opens, choose an installation folder.
 
 - Pick an empty folder for a new install.
-- Pick the folder that contains `Makeplace.exe` for an existing install.
+- Pick the folder that contains `MakePlace.exe` for an existing install.
 - If the folder looks like ReMakeplace but is missing required files, the app will offer a repair instead of treating it as a fresh install.
 
 The main screen shows the selected install path, the stored current version, the latest available version, and the validation state for the selected folder. The current version is the version recorded in the updater config. If the folder cannot be validated, that version is shown as unverified instead of being hidden.
@@ -33,7 +33,7 @@ For repairs, click `Repair Install`. Repairs always download the latest full arc
 
 The app checks for:
 
-- `Makeplace.exe`
+- `MakePlace.exe`
 - `Makeplace/Content` or `MakePlace/Content`
 
 If the executable or game content folder is missing after extraction, the updater reports that directly. That can mean the archive was packaged incorrectly upstream, or that extraction failed. The message is meant to point at the missing structure without assuming which side caused it.

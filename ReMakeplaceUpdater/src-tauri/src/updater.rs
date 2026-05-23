@@ -8,12 +8,17 @@ pub struct UpdateInfo {
     pub download_url: String,
     pub asset_name: String,
     pub asset_size: u64,
+    pub release_url: String,
+    pub release_notes: String,
     pub is_available: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {
     tag_name: String,
+    html_url: String,
+    #[serde(default)]
+    body: Option<String>,
     assets: Vec<GitHubAsset>,
 }
 
@@ -44,6 +49,8 @@ impl UpdateManager {
             download_url: asset.browser_download_url,
             asset_name: asset.name,
             asset_size: asset.size,
+            release_url: latest_release.html_url,
+            release_notes: latest_release.body.unwrap_or_default(),
             is_available,
         })
     }
