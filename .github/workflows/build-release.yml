@@ -31,7 +31,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: 24
+          token: ""
 
       - name: Validate version input
         id: version
@@ -137,7 +138,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: 24
+          token: ""
           cache: npm
           cache-dependency-path: ./ReMakeplaceUpdater/package-lock.json
 
@@ -167,7 +169,7 @@ jobs:
             Installers and portable builds for ReMakeplace Autoupdater v${{ needs.prepare-release.outputs.version }}.
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: false
+          includeUpdaterJson: false
           args: ${{ matrix.args }}
 
       - name: Create portable asset
