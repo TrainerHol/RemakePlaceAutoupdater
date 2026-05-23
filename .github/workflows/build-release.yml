@@ -41,9 +41,14 @@ jobs:
           VERSION="${{ inputs.version }}"
           TAG="$(node ReMakeplaceUpdater/scripts/release-version.mjs "$VERSION")"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists. Delete the stale draft or choose a new version." >&2
-            exit 1
+          if RELEASE_DRAFT="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "$RELEASE_DRAFT" == "true" ]]; then
+              echo "Removing existing draft release $TAG so this run can rebuild it cleanly."
+              gh release delete "$TAG" --yes --cleanup-tag
+            else
+              echo "Release $TAG already exists and is not a draft. Choose a new version." >&2
+              exit 1
+            fi
           fi
           if git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists. Delete the stale tag or choose a new version." >&2
