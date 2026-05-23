@@ -1,31 +1,95 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationMode, ErrorInfo, Metadata } from "./types";
+import BookOpen from "lucide/dist/esm/icons/book-open.mjs";
+import CheckCircle from "lucide/dist/esm/icons/circle-check.mjs";
+import CircleAlert from "lucide/dist/esm/icons/circle-alert.mjs";
+import CircleX from "lucide/dist/esm/icons/circle-x.mjs";
+import Download from "lucide/dist/esm/icons/download.mjs";
+import Eraser from "lucide/dist/esm/icons/eraser.mjs";
+import ExternalLink from "lucide/dist/esm/icons/external-link.mjs";
+import FileText from "lucide/dist/esm/icons/file-text.mjs";
+import Folder from "lucide/dist/esm/icons/folder.mjs";
+import FolderOpen from "lucide/dist/esm/icons/folder-open.mjs";
+import GalleryHorizontal from "lucide/dist/esm/icons/gallery-horizontal.mjs";
+import House from "lucide/dist/esm/icons/house.mjs";
+import Image from "lucide/dist/esm/icons/image.mjs";
+import Info from "lucide/dist/esm/icons/info.mjs";
+import LoaderCircle from "lucide/dist/esm/icons/loader-circle.mjs";
+import MessageCircle from "lucide/dist/esm/icons/message-circle.mjs";
+import Play from "lucide/dist/esm/icons/play.mjs";
+import RefreshCw from "lucide/dist/esm/icons/refresh-cw.mjs";
+import Save from "lucide/dist/esm/icons/save.mjs";
+import Search from "lucide/dist/esm/icons/search.mjs";
+import Settings from "lucide/dist/esm/icons/settings.mjs";
+import Trash2 from "lucide/dist/esm/icons/trash-2.mjs";
+import Wrench from "lucide/dist/esm/icons/wrench.mjs";
+import X from "lucide/dist/esm/icons/x.mjs";
+import type { Config, UpdateInfo, ProgressInfo, AppStatus, InstallationDetection, ErrorInfo, Metadata } from "./types";
 import { AppState, ErrorCategory } from "./types";
+
+type ProgressStage = "idle" | "download" | "extract" | "validate" | "install" | "complete" | "error";
+type IconNode = Array<[string, Record<string, string | number>, IconNode?]>;
+
+const LUCIDE_ICON_NODES: Record<string, IconNode> = {
+  "book-open": BookOpen,
+  "check-circle-2": CheckCircle,
+  "circle-alert": CircleAlert,
+  "circle-x": CircleX,
+  download: Download,
+  eraser: Eraser,
+  "external-link": ExternalLink,
+  "file-text": FileText,
+  folder: Folder,
+  "folder-open": FolderOpen,
+  "gallery-horizontal": GalleryHorizontal,
+  house: House,
+  image: Image,
+  info: Info,
+  "loader-circle": LoaderCircle,
+  "message-circle": MessageCircle,
+  play: Play,
+  "refresh-cw": RefreshCw,
+  save: Save,
+  search: Search,
+  settings: Settings,
+  "trash-2": Trash2,
+  wrench: Wrench,
+  x: X,
+};
 
 class ReMakeplaceUpdater {
   private config: Config | null = null;
   private updateInfo: UpdateInfo | null = null;
+  private installationDetection: InstallationDetection | null = null;
   private currentStatus: AppStatus = {
     state: AppState.IDLE,
     message: "Initializing...",
   };
   private isFirstRun = false;
   private metadata: Metadata | null = null;
+  private actionsBusy = false;
 
   // UI Elements
   private statusMessage!: HTMLElement;
   private currentVersionElement!: HTMLElement;
   private latestVersionElement!: HTMLElement;
   private installationPathElement!: HTMLElement;
+  private validationStatusElement!: HTMLElement;
   private progressBar!: HTMLElement;
   private progressText!: HTMLElement;
+  private progressTitle!: HTMLElement;
+  private progressPercent!: HTMLElement;
+  private progressSize!: HTMLElement;
+  private progressSpeed!: HTMLElement;
   private updateButton!: HTMLButtonElement;
   private launchButton!: HTMLButtonElement;
   private settingsButton!: HTMLButtonElement;
   private clearCacheButton!: HTMLButtonElement;
+  private openCustomButton!: HTMLButtonElement;
+  private openSaveButton!: HTMLButtonElement;
   private progressSection!: HTMLElement;
+  private progressStage: ProgressStage = "idle";
 
   constructor() {
     this.initializeUI();
@@ -40,10 +104,10 @@ class ReMakeplaceUpdater {
       <div class="app-container">
         <!-- Header Section -->
         <div class="header">
-          <h1>RMP Companion</h1>
+          <h1>ReMakeplace Autoupdater</h1>
           <div class="tabs">
-            <button id="tab-updates" class="tab active">Updates</button>
-            <button id="tab-gallery" class="tab">Gallery</button>
+            <button id="tab-updates" class="tab active"><i data-lucide="refresh-cw"></i><span>Updates</span></button>
+            <button id="tab-gallery" class="tab"><i data-lucide="gallery-horizontal"></i><span>Gallery</span></button>
           </div>
         </div>
 
@@ -55,8 +119,9 @@ class ReMakeplaceUpdater {
             <div class="path-display">
               <span class="path-label">Installation Path:</span>
               <span id="installation-path" class="path-text">Not configured</span>
-              <button id="settings-btn" class="settings-btn">⚙️ Settings</button>
+              <button id="settings-btn" class="settings-btn"><i data-lucide="settings"></i><span>Settings</span></button>
             </div>
+            <div id="validation-status" class="validation-status">Not verified</div>
           </div>
 
           <!-- Version Information Section -->
@@ -76,33 +141,56 @@ class ReMakeplaceUpdater {
 
           <!-- Progress Section (hidden by default) -->
           <div id="progress-section" class="section progress-section" style="display: none;">
-            <div class="progress-container">
-              <div id="progress-bar" class="progress-bar">
+            <div class="progress-container" data-phase="idle">
+              <div class="progress-header">
+                <span class="progress-mark"><i data-lucide="download"></i></span>
+                <div class="progress-copy">
+                  <div id="progress-title" class="progress-title">Preparing update</div>
+                  <div id="progress-text" class="progress-detail">Waiting for download to begin</div>
+                </div>
+                <div id="progress-percent" class="progress-percent">0%</div>
+              </div>
+              <div id="progress-bar" class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <div class="progress-fill"></div>
               </div>
-              <div id="progress-text" class="progress-text">0% - 0.0 MB/s</div>
+              <div class="progress-meta">
+                <span id="progress-size">0 MB downloaded</span>
+                <span id="progress-speed">0.0 MB/s</span>
+              </div>
+              <div class="progress-steps" aria-hidden="true">
+                <span class="progress-step" data-step="download"><span class="progress-dot"></span>Download</span>
+                <span class="progress-step" data-step="extract"><span class="progress-dot"></span>Extract</span>
+                <span class="progress-step" data-step="validate"><span class="progress-dot"></span>Validate</span>
+                <span class="progress-step" data-step="install"><span class="progress-dot"></span>Install</span>
+              </div>
             </div>
           </div>
 
           <!-- Button Section -->
           <div class="section button-section">
-            <button id="update-btn" class="btn btn-primary" disabled>Check for Updates</button>
-            <button id="launch-btn" class="btn btn-secondary">Launch ReMakeplace</button>
-            <button id="clear-cache-btn" class="btn btn-small" title="Cleans up leftover downloaded update files.">Clear Cache</button>
+            <div class="action-row action-primary-row">
+              <button id="update-btn" class="btn btn-primary" disabled><i data-lucide="search"></i><span>Check for Updates</span></button>
+              <button id="launch-btn" class="btn btn-secondary"><i data-lucide="play"></i><span>Launch</span></button>
+            </div>
+            <div class="action-row action-utility-row">
+              <button id="open-custom-btn" class="btn btn-small protected-folder-action" hidden><i data-lucide="house"></i><span>Open Custom</span></button>
+              <button id="open-save-btn" class="btn btn-small protected-folder-action" hidden><i data-lucide="save"></i><span>Open Save</span></button>
+              <button id="clear-cache-btn" class="btn btn-small" title="Cleans up leftover downloaded update files."><i data-lucide="eraser"></i><span>Clear Cache</span></button>
+            </div>
           </div>
           </div>
           <div id="view-gallery" style="display:none;">
             <div class="section">
               <div class="gallery-header">
                 <h2 class="gallery-title">Your Designs</h2>
-                <button id="download-designs-btn" class="btn btn-primary btn-small">Download Designs</button>
+                <button id="download-designs-btn" class="btn btn-primary btn-small"><i data-lucide="download"></i><span>Download Designs</span></button>
               </div>
               <div id="gallery-grid" class="gallery-grid"></div>
               <div id="gallery-empty" class="gallery-empty" style="display:none;">
-                <div class="empty-illustration">📦</div>
+                <div class="empty-illustration"><i data-lucide="image"></i></div>
                 <div class="empty-title">No designs yet</div>
-                <div class="empty-sub">Use the “Open in RMP Companion” button on ffxivhousing.com to send designs here, or browse and download from the website.</div>
-                <button id="download-designs-btn-empty" class="btn btn-primary">Download Designs</button>
+                <div class="empty-sub">Use the Open in ReMakeplace Autoupdater button on ffxivhousing.com to send designs here, or browse and download from the website.</div>
+                <button id="download-designs-btn-empty" class="btn btn-primary"><i data-lucide="download"></i><span>Download Designs</span></button>
               </div>
             </div>
           </div>
@@ -112,20 +200,18 @@ class ReMakeplaceUpdater {
         <div class="footer">
           <div class="footer-left" id="readme-link" title="Please read the README before asking questions.">
             <span class="icon book" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256"><path d="M210.78,39.25l-130.25-23A16,16,0,0,0,62,29.23l-29.75,169a16,16,0,0,0,13,18.53l130.25,23h0a16,16,0,0,0,18.54-13l29.75-169A16,16,0,0,0,210.78,39.25ZM178.26,224h0L48,201,77.75,32,208,55ZM89.34,58.42a8,8,0,0,1,9.27-6.48l83,14.65a8,8,0,0,1-1.39,15.88,8.36,8.36,0,0,1-1.4-.12l-83-14.66A8,8,0,0,1,89.34,58.42ZM83.8,89.94a8,8,0,0,1,9.27-6.49l83,14.66A8,8,0,0,1,174.67,114a7.55,7.55,0,0,1-1.41-.13l-83-14.65A8,8,0,0,1,83.8,89.94Zm-5.55,31.51A8,8,0,0,1,87.52,115L129,122.29a8,8,0,0,1-1.38,15.88,8.27,8.27,0,0,1-1.4-.12l-41.5-7.33A8,8,0,0,1,78.25,121.45Z"></path></svg>
+              <i data-lucide="book-open"></i>
             </span>
-            <span class="footer-text">Please read the README before asking questions.</span>
+            <span class="footer-text">Read README first</span>
           </div>
-          <div class="footer-center" id="discord-link" title="Join the Discord">
+          <div id="motd-line" class="motd-line" style="display: none;"></div>
+          <div class="footer-right" id="discord-link" title="Join the Discord">
             <span class="icon discord" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256"><path d="M104,140a12,12,0,1,1-12-12A12,12,0,0,1,104,140Zm60-12a12,12,0,1,0,12,12A12,12,0,0,0,164,128Zm74.45,64.9-67,29.71a16.17,16.17,0,0,1-21.71-9.1l-8.11-22q-6.72.45-13.63.46t-13.63-.46l-8.11,22a16.18,16.18,0,0,1-21.71,9.1l-67-29.71a15.93,15.93,0,0,1-9.06-18.51L38,58A16.07,16.07,0,0,1,51,46.14l36.06-5.93a16.22,16.22,0,0,1,18.26,11.88l3.26,12.84Q118.11,64,128,64t19.4.93l3.26-12.84a16.21,16.21,0,0,1,18.26-11.88L205,46.14A16.07,16.07,0,0,1,218,58l29.53,116.38A15.93,15.93,0,0,1,238.45,192.9ZM232,178.28,202.47,62s0,0-.08,0L166.33,56a.17.17,0,0,0-.17,0l-2.83,11.14c5,.94,10,2.06,14.83,3.42A8,8,0,0,1,176,86.31a8.09,8.09,0,0,1-2.16-.3A172.25,172.25,0,0,0,128,80a172.25,172.25,0,0,0-45.84,6,8,8,0,1,1-4.32-15.4c4.82-1.36,9.78-2.48,14.82-3.42L89.83,56s0,0-.12,0h0L53.61,61.93a.17.17,0,0,0-.09,0L24,178.33,91,208a.23.23,0,0,0,.22,0L98,189.72a173.2,173.2,0,0,1-20.14-4.32A8,8,0,0,1,82.16,170,171.85,171.85,0,0,0,128,176a171.85,171.85,0,0,0,45.84-6,8,8,0,0,1,4.32,15.41A173.2,173.2,0,0,1,158,189.72L164.75,208a.22.22,0,0,0,.21,0Z"></path></svg>
+              <i data-lucide="message-circle"></i>
             </span>
             <span class="footer-text">Join the Discord</span>
           </div>
         </div>
-
-        <!-- MOTD Line (below footer) -->
-        <div id="motd-line" class="motd-line" style="display: none;"></div>
 
         <!-- Settings Modal (hidden by default) -->
         <div id="settings-modal" class="modal" style="display: none;">
@@ -138,7 +224,7 @@ class ReMakeplaceUpdater {
                 <label for="path-input">Installation Path:</label>
                 <div class="path-input-group">
                   <input type="text" id="path-input" class="path-input" placeholder="Select installation folder...">
-                  <button id="browse-btn" class="btn btn-small">Browse</button>
+                  <button id="browse-btn" class="btn btn-small"><i data-lucide="folder-open"></i><span>Browse</span></button>
                 </div>
                 <div id="path-validation" class="validation-message"></div>
               </div>
@@ -147,15 +233,18 @@ class ReMakeplaceUpdater {
                   <input type="checkbox" id="version-override" />
                   Set current version to latest
                 </label>
-                <div class="help-text" title="If your installation shows version 0.0.0 but is actually up to date, check this to sync with the latest version without reinstalling.">ⓘ For existing installations showing incorrect version</div>
+                <div class="help-text" title="If your installation shows version 0.0.0 but is actually up to date, check this to sync with the latest version without reinstalling."><i data-lucide="info"></i><span>For existing installations showing incorrect version</span></div>
               </div>
               <div class="form-group">
-                <button id="open-config-btn" class="btn btn-small" title="Open the folder where config.json is stored">Open config folder</button>
+                <button id="open-config-btn" class="btn btn-small" title="Open the folder where config.json is stored"><i data-lucide="folder"></i><span>Open config folder</span></button>
+                <button id="settings-open-custom-btn" class="btn btn-small protected-folder-action" hidden title="Open the Custom folder for the selected installation"><i data-lucide="house"></i><span>Open Custom</span></button>
+                <button id="settings-open-save-btn" class="btn btn-small protected-folder-action" hidden title="Open the Save folder for the selected installation"><i data-lucide="save"></i><span>Open Save</span></button>
+                <button id="verify-repair-btn" class="btn btn-small btn-secondary" hidden title="Re-check the selected ReMakeplace folder and prepare repair if files are missing"><i data-lucide="wrench"></i><span>Verify / Repair</span></button>
               </div>
             </div>
             <div class="modal-footer">
-              <button id="cancel-btn" class="btn btn-secondary">Cancel</button>
-              <button id="save-btn" class="btn btn-primary" disabled>Save & Continue</button>
+              <button id="cancel-btn" class="btn btn-secondary"><i data-lucide="x"></i><span>Cancel</span></button>
+              <button id="save-btn" class="btn btn-primary" disabled><i data-lucide="check-circle-2"></i><span>Save & Continue</span></button>
             </div>
           </div>
         </div>
@@ -170,8 +259,8 @@ class ReMakeplaceUpdater {
               <div id="confirmation-message" class="confirmation-message"></div>
             </div>
             <div class="modal-footer">
-              <button id="confirmation-cancel" class="btn btn-secondary">Cancel</button>
-              <button id="confirmation-confirm" class="btn btn-primary">Confirm</button>
+              <button id="confirmation-cancel" class="btn btn-secondary"><i data-lucide="x"></i><span>Cancel</span></button>
+              <button id="confirmation-confirm" class="btn btn-primary"><i data-lucide="check-circle-2"></i><span>Confirm</span></button>
             </div>
           </div>
         </div>
@@ -183,17 +272,27 @@ class ReMakeplaceUpdater {
     this.currentVersionElement = document.getElementById("current-version")!;
     this.latestVersionElement = document.getElementById("latest-version")!;
     this.installationPathElement = document.getElementById("installation-path")!;
+    this.validationStatusElement = document.getElementById("validation-status")!;
     this.progressBar = document.getElementById("progress-bar")!;
     this.progressText = document.getElementById("progress-text")!;
+    this.progressTitle = document.getElementById("progress-title")!;
+    this.progressPercent = document.getElementById("progress-percent")!;
+    this.progressSize = document.getElementById("progress-size")!;
+    this.progressSpeed = document.getElementById("progress-speed")!;
     this.updateButton = document.getElementById("update-btn") as HTMLButtonElement;
     this.launchButton = document.getElementById("launch-btn") as HTMLButtonElement;
     this.settingsButton = document.getElementById("settings-btn") as HTMLButtonElement;
     this.clearCacheButton = document.getElementById("clear-cache-btn") as HTMLButtonElement;
+    this.openCustomButton = document.getElementById("open-custom-btn") as HTMLButtonElement;
+    this.openSaveButton = document.getElementById("open-save-btn") as HTMLButtonElement;
     this.progressSection = document.getElementById("progress-section")!;
     // Footer and settings helpers
     const readmeLink = document.getElementById("readme-link") as HTMLElement | null;
     const discordLink = document.getElementById("discord-link") as HTMLElement | null;
     const openConfigBtn = document.getElementById("open-config-btn") as HTMLButtonElement | null;
+    const settingsOpenCustomBtn = document.getElementById("settings-open-custom-btn") as HTMLButtonElement | null;
+    const settingsOpenSaveBtn = document.getElementById("settings-open-save-btn") as HTMLButtonElement | null;
+    const verifyRepairBtn = document.getElementById("verify-repair-btn") as HTMLButtonElement | null;
     const tabUpdates = document.getElementById("tab-updates") as HTMLButtonElement | null;
     const tabGallery = document.getElementById("tab-gallery") as HTMLButtonElement | null;
     const viewUpdates = document.getElementById("view-updates") as HTMLElement | null;
@@ -202,7 +301,7 @@ class ReMakeplaceUpdater {
     if (readmeLink) {
       readmeLink.addEventListener("click", async () => {
         try {
-          await invoke("open_url", { url: "https://github.com/TrainerHol/RemakePlaceAutoupdater#remakeplace-auto-updater-" });
+          await invoke("open_url", { url: "https://github.com/TrainerHol/RemakePlaceAutoupdater#remakeplace-autoupdater" });
         } catch (e) {
           console.error("Failed to open README:", e);
         }
@@ -230,11 +329,21 @@ class ReMakeplaceUpdater {
       });
     }
 
+    settingsOpenCustomBtn?.addEventListener("click", () => this.openGameDataFolder("custom"));
+    settingsOpenSaveBtn?.addEventListener("click", () => this.openGameDataFolder("save"));
+    verifyRepairBtn?.addEventListener("click", async () => {
+      const pathInput = document.getElementById("path-input") as HTMLInputElement;
+      await this.validatePath(pathInput.value);
+      if (this.config?.installation_path) {
+        await this.loadConfiguration();
+      }
+    });
+
     if (tabUpdates && tabGallery && viewUpdates && viewGallery) {
       tabUpdates.addEventListener("click", () => {
         tabUpdates.classList.add("active");
         tabGallery.classList.remove("active");
-        viewUpdates.style.display = "block";
+        viewUpdates.style.display = "flex";
         viewGallery.style.display = "none";
       });
       tabGallery.addEventListener("click", async () => {
@@ -245,6 +354,237 @@ class ReMakeplaceUpdater {
         await this.loadGallery();
       });
     }
+
+    this.renderIcons();
+  }
+
+  private renderIcons() {
+    document.querySelectorAll<HTMLElement>("[data-lucide]").forEach((element) => {
+      if (element.tagName.toLowerCase() === "svg") return;
+
+      const iconName = element.getAttribute("data-lucide");
+      if (!iconName) return;
+
+      const iconNode = LUCIDE_ICON_NODES[iconName];
+      if (!iconNode) return;
+
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      svg.setAttribute("width", "24");
+      svg.setAttribute("height", "24");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke", "currentColor");
+      svg.setAttribute("stroke-width", "2");
+      svg.setAttribute("stroke-linecap", "round");
+      svg.setAttribute("stroke-linejoin", "round");
+      svg.setAttribute("data-lucide", iconName);
+      svg.setAttribute("aria-hidden", element.getAttribute("aria-hidden") || "true");
+      svg.classList.add("lucide", `lucide-${iconName}`);
+
+      this.appendIconNodes(svg, iconNode);
+      element.replaceWith(svg);
+    });
+  }
+
+  private appendIconNodes(parent: SVGElement, nodes: IconNode) {
+    nodes.forEach((node) => {
+      const tag = node[0];
+      const attrs = node[1];
+      const children = node[2];
+      const child = document.createElementNS("http://www.w3.org/2000/svg", tag);
+
+      Object.keys(attrs).forEach((name) => {
+        child.setAttribute(name, String(attrs[name]));
+      });
+
+      if (children) {
+        this.appendIconNodes(child, children);
+      }
+
+      parent.appendChild(child);
+    });
+  }
+
+  private icon(name: string): string {
+    return `<i data-lucide="${name}" aria-hidden="true"></i>`;
+  }
+
+  private setButtonContent(button: HTMLButtonElement, iconName: string, label: string) {
+    button.innerHTML = `${this.icon(iconName)}<span>${this.escapeHtml(label)}</span>`;
+    this.renderIcons();
+  }
+
+  private hasVerifiedInstallation(): boolean {
+    return !!this.config?.installation_path.trim() && this.installationDetection?.status === "existing_valid";
+  }
+
+  private shouldShowVerifyRepair(path: string, detection: InstallationDetection | null): boolean {
+    if (!path.trim() || !detection) return false;
+    if (this.isFirstRun) return false;
+    if (!this.config?.installation_path.trim()) return false;
+    if (path.trim() !== this.config.installation_path.trim()) return false;
+
+    return detection.status === "existing_valid" || detection.status === "existing_incomplete";
+  }
+
+  private updateVerifyRepairVisibility(detection: InstallationDetection | null = null) {
+    const verifyRepairBtn = document.getElementById("verify-repair-btn") as HTMLButtonElement | null;
+    const pathInput = document.getElementById("path-input") as HTMLInputElement | null;
+    if (!verifyRepairBtn || !pathInput) return;
+
+    const shouldShow = this.shouldShowVerifyRepair(pathInput.value, detection);
+    verifyRepairBtn.hidden = !shouldShow;
+    verifyRepairBtn.disabled = !shouldShow;
+  }
+
+  private escapeHtml(value: unknown): string {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  private escapeAttribute(value: unknown): string {
+    return this.escapeHtml(value);
+  }
+
+  private formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
+
+    const units = ["B", "KB", "MB", "GB"];
+    let value = bytes;
+    let unitIndex = 0;
+
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+
+    const decimals = unitIndex <= 1 ? 0 : 1;
+    return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+  }
+
+  private getProgressIcon(stage: ProgressStage): string {
+    switch (stage) {
+      case "download":
+        return "download";
+      case "extract":
+        return "folder-open";
+      case "validate":
+        return "check-circle-2";
+      case "install":
+        return "wrench";
+      case "complete":
+        return "check-circle-2";
+      case "error":
+        return "circle-x";
+      case "idle":
+      default:
+        return "download";
+    }
+  }
+
+  private setProgressBar(percent: number) {
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
+    const progressFill = this.progressBar.querySelector(".progress-fill") as HTMLElement;
+    progressFill.style.width = `${clamped}%`;
+    this.progressBar.setAttribute("aria-valuenow", clamped.toFixed(0));
+    this.progressPercent.textContent = `${clamped.toFixed(0)}%`;
+  }
+
+  private setProgressStage(stage: ProgressStage, title: string, detail: string) {
+    this.progressSection.style.display = "block";
+    const progressContainer = this.progressSection.querySelector(".progress-container") as HTMLElement;
+    progressContainer.dataset.phase = stage;
+    this.progressTitle.textContent = title;
+    this.progressText.textContent = detail;
+
+    if (this.progressStage !== stage) {
+      const mark = this.progressSection.querySelector(".progress-mark") as HTMLElement;
+      mark.innerHTML = this.icon(this.getProgressIcon(stage));
+      this.progressStage = stage;
+      this.renderIcons();
+    }
+
+    this.updateProgressSteps(stage);
+    this.updateStatusVisibility();
+  }
+
+  private resetProgress(title: string, detail: string) {
+    this.progressStage = "idle";
+    this.setProgressBar(0);
+    this.progressSize.textContent = "0 MB downloaded";
+    this.progressSpeed.textContent = "0.0 MB/s";
+    this.setProgressStage("download", title, detail);
+  }
+
+  private updateStatusVisibility() {
+    const progressVisible = this.progressSection.style.display !== "none";
+    this.statusMessage.hidden = progressVisible;
+  }
+
+  private setActionsBusy(isBusy: boolean) {
+    this.actionsBusy = isBusy;
+    this.updateUI();
+  }
+
+  private updateProgressSteps(stage: ProgressStage) {
+    const order: ProgressStage[] = ["download", "extract", "validate", "install"];
+    const activeIndex = stage === "complete" ? order.length : order.indexOf(stage);
+
+    this.progressSection.querySelectorAll<HTMLElement>(".progress-step").forEach((step) => {
+      const stepStage = step.dataset.step as ProgressStage | undefined;
+      const stepIndex = stepStage ? order.indexOf(stepStage) : -1;
+      step.classList.toggle("is-done", stage === "complete" || (stepIndex >= 0 && stepIndex < activeIndex));
+      step.classList.toggle("is-active", stepIndex === activeIndex && stage !== "complete" && stage !== "error");
+    });
+  }
+
+  private applyInstallProgress(message: string) {
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes("extract") || normalized.includes("7z archive")) {
+      const match = message.match(/\((\d{1,3})%\)$/);
+      if (match) {
+        this.setProgressBar(Number(match[1]));
+      } else if (normalized.includes("preparing") || normalized.includes("reading")) {
+        this.setProgressBar(0);
+      }
+      this.setProgressStage("extract", "Extracting archive", message);
+      return;
+    }
+
+    if (normalized.includes("validat")) {
+      this.setProgressBar(100);
+      this.setProgressStage("validate", "Validating files", message);
+      return;
+    }
+
+    if (normalized.includes("backup")) {
+      this.setProgressStage("install", "Preserving user data", message);
+      return;
+    }
+
+    if (normalized.includes("restore")) {
+      this.setProgressStage("install", "Restoring user data", message);
+      return;
+    }
+
+    if (normalized.includes("clean")) {
+      this.setProgressStage("install", "Cleaning up", message);
+      return;
+    }
+
+    if (normalized.includes("complete")) {
+      this.setProgressBar(100);
+      this.setProgressStage("complete", "Update complete", message);
+      return;
+    }
+
+    this.setProgressStage("install", "Installing files", message);
   }
 
   private setupEventListeners() {
@@ -287,6 +627,7 @@ class ReMakeplaceUpdater {
 
     listen<string>("status-update", (event) => {
       this.setStatus(AppState.INSTALLING, event.payload);
+      this.applyInstallProgress(event.payload);
     });
 
     listen<ErrorInfo | string>("error", (event) => {
@@ -306,7 +647,7 @@ class ReMakeplaceUpdater {
 
     // UI event listeners
     this.updateButton.addEventListener("click", () => {
-      if (this.currentStatus.state === AppState.UPDATE_AVAILABLE || this.currentStatus.state === AppState.FRESH_INSTALL_READY) {
+      if (this.currentStatus.state === AppState.UPDATE_AVAILABLE || this.currentStatus.state === AppState.FRESH_INSTALL_READY || this.currentStatus.state === AppState.REPAIR_READY) {
         this.startUpdate();
       } else {
         this.checkForUpdates();
@@ -323,6 +664,14 @@ class ReMakeplaceUpdater {
 
     this.clearCacheButton.addEventListener("click", () => {
       this.clearCache();
+    });
+
+    this.openCustomButton.addEventListener("click", () => {
+      this.openGameDataFolder("custom");
+    });
+
+    this.openSaveButton.addEventListener("click", () => {
+      this.openGameDataFolder("save");
     });
 
     // Settings modal listeners
@@ -359,6 +708,7 @@ class ReMakeplaceUpdater {
   private async loadConfiguration() {
     try {
       this.config = await invoke<Config>("load_config");
+      this.installationDetection = null;
       this.updateUI();
 
       if (!this.config.installation_path) {
@@ -366,21 +716,26 @@ class ReMakeplaceUpdater {
         this.setStatus(AppState.NO_INSTALLATION, "No installation configured");
         this.showSettings(true);
       } else {
-        // Check installation mode and path validity
-        const mode = await invoke<InstallationMode>("detect_installation_mode", {
+        const detection = await invoke<InstallationDetection>("detect_installation", {
           path: this.config.installation_path,
           exeName: this.config.exe_path,
         });
 
-        this.config.installation_mode = mode;
+        this.installationDetection = detection;
+        this.config.installation_mode = detection.mode;
+        this.config.installation_path = detection.normalized_path || this.config.installation_path;
+        this.updateUI();
 
-        if (mode === "fresh_install") {
-          this.setStatus(AppState.FRESH_INSTALL_READY, "Ready for fresh installation");
-          this.updateButton.textContent = "Install ReMakeplace";
-          this.updateButton.disabled = false;
-          this.updateButton.classList.add("btn-install");
+        if (detection.status === "invalid_path") {
+          this.setStatus(AppState.ERROR, detection.message);
+          this.setButtonContent(this.updateButton, "folder-open", "Fix Folder");
+          this.updateButton.disabled = true;
+        } else if (detection.status === "fresh_empty") {
+          await this.checkForUpdates();
+        } else if (detection.status === "existing_incomplete") {
+          await this.checkForUpdates();
         } else {
-          this.checkForUpdates();
+          await this.checkForUpdates();
         }
       }
     } catch (error) {
@@ -422,24 +777,24 @@ class ReMakeplaceUpdater {
       const list = items as Array<any>;
       grid.innerHTML = list
         .map((it) => {
-          // Use direct file paths now that images are stored next to the EXE
           const src = it.image_path ? convertFileSrc(it.image_path) : null;
-          const img = src ? `<img src="${src}" alt="" class="thumb" crossorigin="anonymous"/>` : `<div class="thumb placeholder"></div>`;
+          const img = src ? `<img src="${this.escapeAttribute(src)}" alt="" class="thumb" crossorigin="anonymous"/>` : `<div class="thumb placeholder">${this.icon("image")}</div>`;
           return `
           <div class="card">
             <div class="thumb-wrap">${img}</div>
             <div class="meta">
-              <div class="title">${it.title}</div>
-              <div class="sub">${it.kind} • ${it.author}</div>
+              <div class="title">${this.escapeHtml(it.title)}</div>
+              <div class="sub">${this.escapeHtml(it.kind)} - ${this.escapeHtml(it.author)}</div>
             </div>
             <div class="actions">
-              <button data-json="${it.json_path}" class="btn btn-small open-folder">Show in Folder</button>
-              <button data-id="${it.id}" class="btn btn-small btn-secondary delete-entry">Delete</button>
+              <button data-json="${this.escapeAttribute(it.json_path)}" class="btn btn-small open-folder">${this.icon("external-link")}<span>Show in Folder</span></button>
+              <button data-id="${this.escapeAttribute(it.id)}" class="btn btn-small btn-secondary delete-entry">${this.icon("trash-2")}<span>Delete</span></button>
             </div>
           </div>
         `;
         })
         .join("");
+      this.renderIcons();
 
       // Wire actions
       grid.querySelectorAll(".open-folder").forEach((btn) => {
@@ -528,9 +883,18 @@ class ReMakeplaceUpdater {
     if (!motdLine) return;
 
     if (motd) {
-      motdLine.textContent = motd;
-      motdLine.style.display = "block";
+      const content = this.escapeHtml(motd);
+      motdLine.setAttribute("aria-label", motd);
+      motdLine.innerHTML = `
+        <div class="motd-track">
+          <span class="motd-item">${content}</span>
+          <span class="motd-item" aria-hidden="true">${content}</span>
+        </div>
+      `;
+      motdLine.style.display = "flex";
     } else {
+      motdLine.innerHTML = "";
+      motdLine.removeAttribute("aria-label");
       motdLine.style.display = "none";
     }
   }
@@ -539,17 +903,47 @@ class ReMakeplaceUpdater {
     if (!this.config) return;
 
     this.currentVersionElement.textContent = this.config.current_version;
+    this.currentVersionElement.classList.toggle("version-unverified", !!this.config.installation_path && this.installationDetection?.status !== "existing_valid");
+    this.currentVersionElement.title = this.installationDetection?.status === "existing_valid"
+      ? "Version recorded for the selected installation"
+      : "Stored version is not verified against the selected folder";
     this.installationPathElement.textContent = this.config.installation_path || "Not configured";
 
-    // Update launch button state based on installation mode
-    if (!this.config.installation_path) {
-      this.launchButton.disabled = true;
-    } else if (this.config.installation_mode === "fresh_install") {
-      this.launchButton.disabled = true;
-      this.launchButton.textContent = "Install Required";
+    if (!this.installationDetection) {
+      this.validationStatusElement.textContent = this.config.installation_path ? "Not verified" : "Choose an installation folder";
+      this.validationStatusElement.className = "validation-status";
     } else {
+      this.validationStatusElement.textContent = this.installationDetection.message;
+      this.validationStatusElement.className = `validation-status ${this.installationDetection.status}`;
+    }
+
+    const canOpenDataFolders = !this.actionsBusy && this.hasVerifiedInstallation();
+    this.openCustomButton.hidden = !canOpenDataFolders;
+    this.openSaveButton.hidden = !canOpenDataFolders;
+    this.openCustomButton.disabled = !canOpenDataFolders;
+    this.openSaveButton.disabled = !canOpenDataFolders;
+    this.clearCacheButton.hidden = this.actionsBusy;
+    this.clearCacheButton.disabled = this.actionsBusy;
+
+    // Update launch button state based on installation mode
+    if (this.actionsBusy) {
+      this.launchButton.hidden = true;
+      this.launchButton.disabled = true;
+    } else if (!this.config.installation_path) {
+      this.launchButton.hidden = true;
+      this.launchButton.disabled = true;
+    } else if (this.installationDetection?.status === "existing_incomplete") {
+      this.launchButton.hidden = true;
+      this.launchButton.disabled = true;
+      this.setButtonContent(this.launchButton, "wrench", "Repair Required");
+    } else if (this.config.installation_mode === "fresh_install") {
+      this.launchButton.hidden = true;
+      this.launchButton.disabled = true;
+      this.setButtonContent(this.launchButton, "download", "Install Required");
+    } else {
+      this.launchButton.hidden = false;
       this.launchButton.disabled = false;
-      this.launchButton.textContent = "Launch ReMakeplace";
+      this.setButtonContent(this.launchButton, "play", "Launch");
     }
   }
 
@@ -584,32 +978,50 @@ class ReMakeplaceUpdater {
     if (!this.config) return;
 
     this.setStatus(AppState.CHECKING_UPDATES, "Checking for updates...");
+    this.updateButton.hidden = false;
     this.updateButton.disabled = true;
+    this.updateButton.classList.remove("is-busy");
 
     try {
       this.updateInfo = await invoke<UpdateInfo>("check_updates", { config: this.config });
       this.latestVersionElement.textContent = this.updateInfo.latest_version;
+      this.updateButton.classList.remove("btn-update", "btn-install");
 
-      if (this.config.installation_mode === "fresh_install") {
+      if (!this.updateInfo.download_url) {
+        this.setStatus(AppState.ERROR, "No supported ReMakeplace archive was found on the latest release");
+        this.updateButton.hidden = false;
+        this.setButtonContent(this.updateButton, "refresh-cw", "Retry");
+        this.updateButton.disabled = false;
+      } else if (this.installationDetection?.status === "fresh_empty" || this.config.installation_mode === "fresh_install") {
         this.setStatus(AppState.FRESH_INSTALL_READY, `Ready to install version ${this.updateInfo.latest_version}`);
-        this.updateButton.textContent = "Install Now";
+        this.updateButton.hidden = false;
+        this.setButtonContent(this.updateButton, "download", "Install Now");
+        this.updateButton.disabled = false;
+        this.updateButton.classList.add("btn-install");
+      } else if (this.installationDetection?.status === "existing_incomplete") {
+        this.setStatus(AppState.REPAIR_READY, `Repair available using version ${this.updateInfo.latest_version}`);
+        this.updateButton.hidden = false;
+        this.setButtonContent(this.updateButton, "wrench", "Repair Install");
         this.updateButton.disabled = false;
         this.updateButton.classList.add("btn-install");
       } else if (this.updateInfo.is_available) {
         this.setStatus(AppState.UPDATE_AVAILABLE, `Update available: ${this.updateInfo.latest_version}`);
-        this.updateButton.textContent = "Update Now";
+        this.updateButton.hidden = false;
+        this.setButtonContent(this.updateButton, "download", "Update Now");
         this.updateButton.disabled = false;
         this.updateButton.classList.add("btn-update");
       } else {
         this.setStatus(AppState.UP_TO_DATE, "You have the latest version");
-        this.updateButton.textContent = "Up to Date";
+        this.setButtonContent(this.updateButton, "check-circle-2", "Up to Date");
+        this.updateButton.hidden = true;
         this.updateButton.disabled = true;
         this.updateButton.classList.remove("btn-update");
       }
     } catch (error) {
       this.setStatus(AppState.ERROR, `Failed to check updates: ${error}`);
+      this.updateButton.hidden = false;
       this.updateButton.disabled = false;
-      this.updateButton.textContent = "Retry";
+      this.setButtonContent(this.updateButton, "refresh-cw", "Retry");
     }
   }
 
@@ -618,8 +1030,14 @@ class ReMakeplaceUpdater {
 
     // Check if this is a fresh install or update
     const isFreshInstall = this.config.installation_mode === "fresh_install";
+    const isRepair = this.installationDetection?.status === "existing_incomplete";
 
-    if (!isFreshInstall && !this.updateInfo.is_available) return;
+    if (!this.updateInfo.download_url) {
+      this.setStatus(AppState.ERROR, "No supported ReMakeplace archive is available to download");
+      return;
+    }
+
+    if (!isFreshInstall && !isRepair && !this.updateInfo.is_available) return;
 
     // Show confirmation dialog for fresh installs
     if (isFreshInstall) {
@@ -628,46 +1046,69 @@ class ReMakeplaceUpdater {
       if (!confirmed) {
         return;
       }
+    } else if (isRepair) {
+      const detail = this.installationDetection?.details?.join("\n") || "The selected installation is missing required files.";
+      const confirmed = await this.showConfirmation("Repair Installation", `This will download ReMakeplace ${this.updateInfo.latest_version} and repair missing game files at:\n\n${this.config.installation_path}\n\n${detail}\n\nYour Custom and Save folders will be preserved.`);
+
+      if (!confirmed) {
+        return;
+      }
     }
 
-    const statusMessage = isFreshInstall ? "Starting fresh installation..." : "Starting download...";
+    const statusMessage = isFreshInstall ? "Starting fresh installation..." : isRepair ? "Starting repair..." : "Starting download...";
     this.setStatus(AppState.DOWNLOADING, statusMessage);
-    this.progressSection.style.display = "block";
+    this.setActionsBusy(true);
+    this.updateButton.hidden = false;
+    this.resetProgress(
+      isFreshInstall ? "Installing ReMakeplace" : isRepair ? "Repairing installation" : "Updating ReMakeplace",
+      "Connecting to the release archive"
+    );
     this.updateButton.disabled = true;
+    this.updateButton.classList.add("is-busy");
+    this.setButtonContent(this.updateButton, "loader-circle", "Working");
 
     try {
-      const filename = this.updateInfo.download_url.split("/").pop() || "update.7z";
+      const filename = this.updateInfo.asset_name || this.updateInfo.download_url.split("/").pop() || "update.7z";
 
       await invoke("start_download", {
         url: this.updateInfo.download_url,
         version: this.updateInfo.latest_version,
         originalFilename: filename,
+        expectedSize: this.updateInfo.asset_size,
       });
     } catch (error) {
       this.setStatus(AppState.ERROR, `Failed to start download: ${error}`);
-      this.progressSection.style.display = "none";
+      this.setProgressStage("error", "Download could not start", String(error));
+      this.setActionsBusy(false);
+      this.updateButton.classList.remove("is-busy");
+      this.updateButton.hidden = false;
+      this.updateButton.disabled = false;
+      this.setButtonContent(this.updateButton, "refresh-cw", "Retry");
     }
   }
 
   private updateProgress(progress: ProgressInfo) {
-    const progressFill = this.progressBar.querySelector(".progress-fill") as HTMLElement;
-
-    progressFill.style.width = `${progress.percentage}%`;
+    if (!(progress.is_retrying && progress.percentage <= 0)) {
+      this.setProgressBar(progress.percentage);
+    }
 
     const speedText = progress.speed > 0 ? `${progress.speed.toFixed(1)} MB/s` : "0.0 MB/s";
-    let statusText = `${progress.percentage.toFixed(1)}% - ${speedText}`;
+    this.progressSpeed.textContent = speedText;
+    const sizeText = progress.total > 0
+      ? `${this.formatBytes(progress.downloaded)} of ${this.formatBytes(progress.total)}`
+      : `${this.formatBytes(progress.downloaded)} downloaded`;
+    this.progressSize.textContent = sizeText;
+
+    let progressDetail = `${sizeText} at ${speedText}`;
 
     // Show retry information if applicable
     if (progress.is_retrying && progress.retry_count > 0) {
-      statusText += ` (Retry ${progress.retry_count})`;
-      if (progress.retry_reason) {
-        statusText += ` - ${progress.retry_reason}`;
-      }
+      progressDetail = `Retry ${progress.retry_count} after an interrupted connection`;
     }
 
-    this.progressText.textContent = statusText;
+    this.setProgressStage("download", progress.is_retrying ? "Retrying download" : "Downloading release", progressDetail);
 
-    const downloadMsg = progress.is_retrying ? `Retrying download... ${progress.percentage.toFixed(1)}%` : `Downloading update... ${progress.percentage.toFixed(1)}%`;
+    const downloadMsg = progress.is_retrying ? "Retrying download" : "Downloading release";
 
     this.setStatus(AppState.DOWNLOADING, downloadMsg);
   }
@@ -676,12 +1117,15 @@ class ReMakeplaceUpdater {
     if (!this.config || !this.updateInfo) return;
 
     const isFreshInstall = this.config.installation_mode === "fresh_install";
-    const statusMessage = isFreshInstall ? "Download complete, starting fresh installation..." : "Download complete, starting installation...";
+    const isRepair = this.installationDetection?.status === "existing_incomplete";
+    const statusMessage = isFreshInstall ? "Download complete, starting fresh installation..." : isRepair ? "Download complete, starting repair..." : "Download complete, starting installation...";
 
     this.setStatus(AppState.INSTALLING, statusMessage);
+    this.setProgressBar(100);
+    this.setProgressStage("extract", "Preparing files", "Download complete. Extracting to a staging folder.");
 
     try {
-      const filename = this.updateInfo.download_url.split("/").pop() || "update.7z";
+      const filename = this.updateInfo.asset_name || this.updateInfo.download_url.split("/").pop() || "update.7z";
 
       // Get the cache path from the backend to ensure consistency
       const cachePath = await invoke<string>("get_cache_path", {
@@ -694,8 +1138,15 @@ class ReMakeplaceUpdater {
         config: this.config,
       });
     } catch (error) {
-      this.setStatus(AppState.ERROR, `Installation failed: ${error}`);
-      this.progressSection.style.display = "none";
+      console.error("Failed to start installation:", error);
+      const message = "The update could not be installed. Try clearing the cache and downloading again.";
+      this.setStatus(AppState.ERROR, message);
+      this.setProgressStage("error", "Installation stopped", message);
+      this.setActionsBusy(false);
+      this.updateButton.classList.remove("is-busy");
+      this.updateButton.hidden = false;
+      this.updateButton.disabled = false;
+      this.setButtonContent(this.updateButton, "refresh-cw", "Retry");
     }
   }
 
@@ -703,8 +1154,17 @@ class ReMakeplaceUpdater {
     const wasFreshInstall = this.config?.installation_mode === "fresh_install";
     const successMessage = wasFreshInstall ? "Fresh installation completed successfully!" : "Update completed successfully!";
 
+    this.setProgressBar(100);
+    this.setProgressStage("complete", "Update complete", "ReMakeplace is ready to launch.");
     this.setStatus(AppState.UP_TO_DATE, successMessage);
-    this.progressSection.style.display = "none";
+    this.setActionsBusy(false);
+    this.updateButton.classList.remove("is-busy");
+    window.setTimeout(() => {
+      if (this.currentStatus.state === AppState.UP_TO_DATE) {
+        this.progressSection.style.display = "none";
+        this.updateStatusVisibility();
+      }
+    }, 1200);
 
     // Update installation mode and version after successful fresh install
     if (wasFreshInstall && this.config && this.updateInfo) {
@@ -739,11 +1199,11 @@ class ReMakeplaceUpdater {
     const versionOverrideCheckbox = document.getElementById("version-override") as HTMLInputElement;
 
     if (isFirstRun) {
-      modalHeader.textContent = "Welcome to RMP Companion";
+      modalHeader.textContent = "Welcome to ReMakeplace Autoupdater";
       const modalBody = modal.querySelector(".modal-body")!;
       const existingWelcome = modalBody.querySelector(".welcome-message");
       if (!existingWelcome) {
-        modalBody.insertAdjacentHTML("afterbegin", '<p class="welcome-message">Please select your ReMakeplace installation folder to continue.</p>');
+        modalBody.insertAdjacentHTML("afterbegin", '<p class="welcome-message">Select an existing ReMakeplace folder to update, or choose an empty folder for a fresh install.</p>');
       }
     } else {
       modalHeader.textContent = "Settings";
@@ -754,9 +1214,9 @@ class ReMakeplaceUpdater {
     }
 
     pathInput.value = this.config?.installation_path || "";
+    this.updateVerifyRepairVisibility(this.installationDetection);
 
-    // Show version override option for existing installations (not fresh install)
-    if (this.config && this.config.installation_path && this.config.installation_mode === "update") {
+    if (this.hasVerifiedInstallation()) {
       versionOverrideGroup.style.display = "block";
       versionOverrideCheckbox.checked = false;
     } else {
@@ -768,6 +1228,16 @@ class ReMakeplaceUpdater {
     if (this.config?.installation_path) {
       this.validatePath(this.config.installation_path);
     }
+
+    const canOpenDataFolders = this.hasVerifiedInstallation();
+    const settingsOpenCustomBtn = document.getElementById("settings-open-custom-btn") as HTMLButtonElement;
+    const settingsOpenSaveBtn = document.getElementById("settings-open-save-btn") as HTMLButtonElement;
+    settingsOpenCustomBtn.hidden = !canOpenDataFolders;
+    settingsOpenSaveBtn.hidden = !canOpenDataFolders;
+    settingsOpenCustomBtn.disabled = !canOpenDataFolders;
+    settingsOpenSaveBtn.disabled = !canOpenDataFolders;
+    this.updateVerifyRepairVisibility(this.installationDetection);
+    this.renderIcons();
   }
 
   private async validatePath(path: string) {
@@ -778,24 +1248,20 @@ class ReMakeplaceUpdater {
       validation.innerHTML = "";
       validation.className = "validation-message";
       saveBtn.disabled = true;
+      this.updateVerifyRepairVisibility(null);
       return;
     }
 
-    // Show loading state
-    validation.innerHTML = '<span class="validation-loading">🔄 Validating path...</span>';
+    validation.innerHTML = `<span class="validation-loading">${this.icon("loader-circle")}<span>Validating path...</span></span>`;
     validation.className = "validation-message loading";
     saveBtn.disabled = true;
+    this.updateVerifyRepairVisibility(null);
+    this.renderIcons();
 
     try {
-      // Detect installation mode
-      const mode = await invoke<InstallationMode>("detect_installation_mode", {
+      const detection = await invoke<InstallationDetection>("detect_installation", {
         path: path,
         exeName: this.config?.exe_path || "Makeplace.exe",
-      });
-
-      // Get mode description
-      const modeDescription = await invoke<string>("get_mode_description", {
-        mode: mode,
       });
 
       // Validate with detailed error information
@@ -803,32 +1269,36 @@ class ReMakeplaceUpdater {
         await invoke<string>("validate_path_detailed", {
           path: path,
           exeName: this.config?.exe_path || "Makeplace.exe",
-          mode: mode,
+          mode: detection.mode,
         });
 
         // Path is valid
-        const modeText = mode === "fresh_install" ? "fresh installation" : "existing installation";
+        const statusText = this.getDetectionLabel(detection);
+        const details = detection.details.length > 0 ? detection.details.map((detail) => this.escapeHtml(detail)).join("<br>") : this.escapeHtml(detection.message);
         validation.innerHTML = `
-          <div class="validation-success">
-            <span class="validation-icon">✅</span>
+          <div class="${this.getValidationBoxClass(detection)}">
+            <span class="validation-icon">${this.icon(this.getDetectionIcon(detection))}</span>
             <div class="validation-content">
-              <div class="validation-main">Valid path for ${modeText}</div>
-              <div class="validation-sub">${modeDescription}</div>
+              <div class="validation-main">${this.escapeHtml(statusText)}</div>
+              <div class="validation-sub">${details}</div>
             </div>
           </div>
         `;
-        validation.className = "validation-message valid";
+        validation.className = `validation-message valid ${detection.status}`;
         saveBtn.disabled = false;
+        this.updateVerifyRepairVisibility(detection);
+        this.renderIcons();
       } catch (errorInfo: any) {
         // Path validation failed with detailed error
         this.showValidationError(validation, errorInfo);
+        this.updateVerifyRepairVisibility(detection);
         saveBtn.disabled = true;
       }
     } catch (error) {
       // Fallback for unexpected errors
       validation.innerHTML = `
         <div class="validation-error">
-          <span class="validation-icon">❌</span>
+          <span class="validation-icon">${this.icon("circle-x")}</span>
           <div class="validation-content">
             <div class="validation-main">Error validating path</div>
             <div class="validation-sub">Please try again or select a different path</div>
@@ -837,21 +1307,56 @@ class ReMakeplaceUpdater {
       `;
       validation.className = "validation-message invalid";
       saveBtn.disabled = true;
+      this.updateVerifyRepairVisibility(null);
+      this.renderIcons();
     }
   }
 
   private showValidationError(validation: HTMLElement, errorInfo: ErrorInfo) {
     validation.innerHTML = `
       <div class="validation-error">
-        <span class="validation-icon">❌</span>
+        <span class="validation-icon">${this.icon("circle-x")}</span>
         <div class="validation-content">
-          <div class="validation-main">${errorInfo.user_message}</div>
-          <div class="validation-sub">${errorInfo.recovery_suggestion}</div>
-          ${errorInfo.category === ErrorCategory.Permission ? '<div class="validation-tip">💡 Try running as administrator</div>' : ""}
+          <div class="validation-main">${this.escapeHtml(errorInfo.user_message)}</div>
+          <div class="validation-sub">${this.escapeHtml(errorInfo.recovery_suggestion)}</div>
+          ${errorInfo.category === ErrorCategory.Permission ? `<div class="validation-tip">${this.icon("info")}<span>Try running as administrator</span></div>` : ""}
         </div>
       </div>
     `;
     validation.className = "validation-message invalid";
+    this.renderIcons();
+  }
+
+  private getValidationBoxClass(detection: InstallationDetection): string {
+    return detection.status === "existing_incomplete" ? "validation-warning" : "validation-success";
+  }
+
+  private getDetectionIcon(detection: InstallationDetection): string {
+    switch (detection.status) {
+      case "existing_valid":
+        return "check-circle-2";
+      case "existing_incomplete":
+        return "circle-alert";
+      case "fresh_empty":
+        return "folder-open";
+      case "invalid_path":
+      default:
+        return "circle-x";
+    }
+  }
+
+  private getDetectionLabel(detection: InstallationDetection): string {
+    switch (detection.status) {
+      case "existing_valid":
+        return "Existing installation detected";
+      case "existing_incomplete":
+        return "Existing installation needs repair";
+      case "fresh_empty":
+        return "Empty folder ready for fresh install";
+      case "invalid_path":
+      default:
+        return "Invalid installation folder";
+    }
   }
 
   private async browseFolder() {
@@ -871,15 +1376,19 @@ class ReMakeplaceUpdater {
     if (!this.config) return;
 
     try {
-      // Detect and set installation mode
-      const mode = await invoke<InstallationMode>("detect_installation_mode", {
+      const detection = await invoke<InstallationDetection>("detect_installation", {
         path: path,
         exeName: this.config.exe_path,
       });
 
+      if (detection.status === "invalid_path") {
+        this.setStatus(AppState.ERROR, detection.message);
+        return;
+      }
+
       // Check if user is switching from an existing installation to a fresh install location
       const wasExistingInstall = this.config.installation_path && this.config.installation_mode === "update";
-      const willBeFreshInstall = mode === "fresh_install";
+      const willBeFreshInstall = detection.status === "fresh_empty";
 
       if (wasExistingInstall && willBeFreshInstall) {
         const confirmed = await this.showConfirmation("Fresh Installation", `The selected folder doesn't contain an existing ReMakeplace installation.\n\nDo you want to perform a fresh installation at:\n${path}`);
@@ -889,8 +1398,9 @@ class ReMakeplaceUpdater {
         }
       }
 
-      this.config.installation_path = path;
-      this.config.installation_mode = mode;
+      this.installationDetection = detection;
+      this.config.installation_path = detection.normalized_path || path;
+      this.config.installation_mode = detection.mode;
       await invoke("save_config", { config: this.config });
 
       const modal = document.getElementById("settings-modal")!;
@@ -898,10 +1408,8 @@ class ReMakeplaceUpdater {
 
       this.updateUI();
 
-      if (this.isFirstRun || mode === "fresh_install") {
-        this.isFirstRun = false;
-        this.checkForUpdates();
-      }
+      this.isFirstRun = false;
+      await this.checkForUpdates();
     } catch (error) {
       this.setStatus(AppState.ERROR, `Failed to save configuration: ${error}`);
     }
@@ -922,9 +1430,31 @@ class ReMakeplaceUpdater {
     }
   }
 
+  private async openGameDataFolder(folder: "custom" | "save") {
+    if (!this.config?.installation_path) {
+      this.showSettings();
+      return;
+    }
+
+    if (!this.hasVerifiedInstallation()) {
+      this.setStatus(AppState.ERROR, "Open Custom and Open Save are available only after a valid ReMakeplace installation is detected.");
+      return;
+    }
+
+    try {
+      await invoke("open_game_data_folder", { config: this.config, folder });
+    } catch (error) {
+      this.setStatus(AppState.ERROR, `Failed to open ${folder === "custom" ? "Custom" : "Save"} folder: ${error}`);
+    }
+  }
+
   private setStatus(state: AppState, message: string, error?: string) {
     this.currentStatus = { state, message, error };
     this.statusMessage.textContent = message;
+
+    if (state === AppState.ERROR && this.progressStage === "complete") {
+      this.progressSection.style.display = "none";
+    }
 
     // Update status message styling based on state
     this.statusMessage.className = `status-message ${state}`;
@@ -932,25 +1462,32 @@ class ReMakeplaceUpdater {
     if (state === AppState.ERROR) {
       this.statusMessage.classList.add("error");
     }
+
+    this.updateStatusVisibility();
   }
 
   private handleDownloadError(errorInfo: ErrorInfo) {
-    const message = errorInfo.is_retryable ? `${errorInfo.user_message} Retrying automatically...` : errorInfo.user_message;
-
-    this.setStatus(AppState.ERROR, message);
+    this.setStatus(AppState.ERROR, errorInfo.user_message);
+    this.setProgressStage("error", "Download stopped", errorInfo.recovery_suggestion || errorInfo.user_message);
 
     // Show detailed error in console for debugging
     console.error("Download error details:", errorInfo);
 
-    // If it's retryable, don't hide progress section yet
-    if (!errorInfo.is_retryable) {
-      this.progressSection.style.display = "none";
-      this.updateButton.disabled = false;
-    }
+    this.setActionsBusy(false);
+    this.updateButton.classList.remove("is-busy");
+    this.updateButton.hidden = false;
+    this.updateButton.disabled = false;
+    this.setButtonContent(this.updateButton, "refresh-cw", "Retry");
   }
 
   private handleErrorInfo(errorInfo: ErrorInfo) {
     this.setStatus(AppState.ERROR, errorInfo.user_message);
+    this.setProgressStage("error", "Update stopped", errorInfo.recovery_suggestion || errorInfo.user_message);
+    this.setActionsBusy(false);
+    this.updateButton.classList.remove("is-busy");
+    this.updateButton.hidden = false;
+    this.updateButton.disabled = false;
+    this.setButtonContent(this.updateButton, "refresh-cw", "Retry");
     console.error("Error details:", errorInfo);
   }
 
@@ -958,18 +1495,21 @@ class ReMakeplaceUpdater {
     let userFriendlyMsg = "An error occurred";
 
     if (errorMsg.includes("Extraction failed")) {
-      if (errorMsg.includes("zst")) {
-        userFriendlyMsg = "Archive extraction failed. The downloaded file may be corrupted or in an unsupported format. Try clearing cache and downloading again.";
-      } else {
-        userFriendlyMsg = "Failed to extract the update archive. The file may be corrupted.";
-      }
+      userFriendlyMsg = "The downloaded release could not be installed. Try clearing the cache and downloading again. If it keeps happening, the release archive may need to be checked.";
     } else if (errorMsg.includes("Backup failed")) {
       userFriendlyMsg = "Failed to backup your data before updating. Check that you have sufficient disk space.";
     } else if (errorMsg.includes("Failed to restore")) {
       userFriendlyMsg = "Update completed but failed to restore some user data. Check your installation directory.";
     }
 
-    this.setStatus(AppState.ERROR, `${userFriendlyMsg} (${errorMsg})`);
+    console.error("Update error details:", errorMsg);
+    this.setStatus(AppState.ERROR, userFriendlyMsg);
+    this.setProgressStage("error", "Update stopped", userFriendlyMsg);
+    this.setActionsBusy(false);
+    this.updateButton.classList.remove("is-busy");
+    this.updateButton.hidden = false;
+    this.updateButton.disabled = false;
+    this.setButtonContent(this.updateButton, "refresh-cw", "Retry");
   }
 
   private showConfirmation(title: string, message: string): Promise<boolean> {

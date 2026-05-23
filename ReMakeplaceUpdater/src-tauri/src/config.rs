@@ -1,8 +1,8 @@
-use crate::error_handler::{ErrorHandler, ErrorInfo};
+use crate::error_handler::ErrorInfo;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -23,6 +23,29 @@ pub struct Config {
 pub enum InstallationMode {
     Update,
     FreshInstall,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallationStatus {
+    FreshEmpty,
+    ExistingValid,
+    ExistingIncomplete,
+    InvalidPath,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallationDetection {
+    pub status: InstallationStatus,
+    pub mode: InstallationMode,
+    pub normalized_path: String,
+    pub exe_path: Option<String>,
+    pub content_path: Option<String>,
+    pub datasmith_path: Option<String>,
+    pub custom_path: Option<String>,
+    pub save_path: Option<String>,
+    pub message: String,
+    pub details: Vec<String>,
 }
 
 fn default_installation_mode() -> InstallationMode {
@@ -51,6 +74,9 @@ impl ConfigManager {
 
     pub fn save_config(config: &Config) -> Result<()> {
         let config_path = Self::get_config_path();
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent).context("Failed to create config directory")?;
+        }
         let content = serde_json::to_string_pretty(config).context("Failed to serialize config")?;
 
         fs::write(&config_path, content).context("Failed to write config.json")?;
@@ -93,110 +119,260 @@ impl ConfigManager {
             });
         }
 
-        let path_buf = PathBuf::from(path);
-
-        // Check if path exists
-        if !path_buf.exists() {
-            return Err(ErrorInfo {
-                category: crate::error_handler::ErrorCategory::FileSystem,
-                user_message: "The selected directory does not exist.".to_string(),
-                technical_details: format!("Path does not exist: {}", path),
-                recovery_suggestion: "Create the directory or select an existing one.".to_string(),
-                is_retryable: false,
-            });
-        }
-
-        // Check if it's a directory
-        if !path_buf.is_dir() {
+        let detection = Self::detect_installation(path, exe_name);
+        if detection.status == InstallationStatus::InvalidPath {
             return Err(ErrorInfo {
                 category: crate::error_handler::ErrorCategory::Validation,
-                user_message: "The selected path is not a directory.".to_string(),
-                technical_details: format!("Path is not a directory: {}", path),
-                recovery_suggestion: "Select a directory, not a file.".to_string(),
+                user_message: detection.message,
+                technical_details: detection.details.join("; "),
+                recovery_suggestion:
+                    "Select an empty folder for a new install or a ReMakeplace folder to update."
+                        .to_string(),
                 is_retryable: false,
             });
         }
 
-        // Test write permissions
-        let test_file = path_buf.join(".write_test");
-        if let Err(e) = std::fs::write(&test_file, "test") {
+        if *mode == InstallationMode::FreshInstall
+            && detection.status != InstallationStatus::FreshEmpty
+        {
             return Err(ErrorInfo {
-                category: crate::error_handler::ErrorCategory::Permission,
-                user_message: "Cannot write to the selected directory.".to_string(),
-                technical_details: format!("Write permission test failed: {}", e),
-                recovery_suggestion: "Choose a different directory or run as administrator."
+                category: crate::error_handler::ErrorCategory::Validation,
+                user_message: "This folder already looks like a ReMakeplace installation."
                     .to_string(),
+                technical_details: detection.details.join("; "),
+                recovery_suggestion:
+                    "Use repair/update for this folder or choose an empty folder for a new install."
+                        .to_string(),
                 is_retryable: false,
             });
-        } else {
-            let _ = std::fs::remove_file(&test_file); // Clean up test file
-        }
-
-        match mode {
-            InstallationMode::Update => {
-                // For updates, exe must exist
-                let exe_path = path_buf.join(exe_name);
-                if !exe_path.exists() {
-                    return Err(ErrorInfo {
-                        category: crate::error_handler::ErrorCategory::Validation,
-                        user_message: format!(
-                            "Could not find {} in the selected directory.",
-                            exe_name
-                        ),
-                        technical_details: format!("Executable not found: {}", exe_path.display()),
-                        recovery_suggestion:
-                            "Select the directory containing your ReMakeplace installation."
-                                .to_string(),
-                        is_retryable: false,
-                    });
-                }
-
-                if !exe_path.is_file() {
-                    return Err(ErrorInfo {
-                        category: crate::error_handler::ErrorCategory::Validation,
-                        user_message: format!(
-                            "{} exists but is not a valid executable file.",
-                            exe_name
-                        ),
-                        technical_details: format!("Path is not a file: {}", exe_path.display()),
-                        recovery_suggestion:
-                            "Select the correct directory containing the ReMakeplace executable."
-                                .to_string(),
-                        is_retryable: false,
-                    });
-                }
-            }
-            InstallationMode::FreshInstall => {
-                // For fresh installs, check if directory is empty or warn if it contains files
-                if let Ok(entries) = std::fs::read_dir(&path_buf) {
-                    let count = entries.count();
-                    if count > 0 {
-                        // This is a warning, not an error - we still allow it
-                        println!("Warning: Directory is not empty, installation will merge files");
-                    }
-                }
-            }
         }
 
         Ok(())
     }
 
     pub fn detect_installation_mode(path: &str, exe_name: &str) -> InstallationMode {
-        if path.is_empty() {
-            return InstallationMode::FreshInstall;
+        Self::detect_installation(path, exe_name).mode
+    }
+
+    pub fn detect_installation(path: &str, exe_name: &str) -> InstallationDetection {
+        if path.trim().is_empty() {
+            return InstallationDetection {
+                status: InstallationStatus::InvalidPath,
+                mode: InstallationMode::FreshInstall,
+                normalized_path: String::new(),
+                exe_path: None,
+                content_path: None,
+                datasmith_path: None,
+                custom_path: None,
+                save_path: None,
+                message: "Choose an installation folder.".to_string(),
+                details: vec!["Empty path provided".to_string()],
+            };
         }
 
         let path_buf = PathBuf::from(path);
+        let normalized_path = path_buf
+            .canonicalize()
+            .unwrap_or_else(|_| path_buf.clone())
+            .to_string_lossy()
+            .to_string();
+
         if !path_buf.exists() {
-            return InstallationMode::FreshInstall;
+            return InstallationDetection {
+                status: InstallationStatus::InvalidPath,
+                mode: InstallationMode::FreshInstall,
+                normalized_path,
+                exe_path: None,
+                content_path: None,
+                datasmith_path: None,
+                custom_path: None,
+                save_path: None,
+                message: "The selected folder does not exist.".to_string(),
+                details: vec![format!("Path does not exist: {}", path)],
+            };
         }
 
-        let exe_path = path_buf.join(exe_name);
-        if exe_path.exists() && exe_path.is_file() {
-            InstallationMode::Update
-        } else {
-            InstallationMode::FreshInstall
+        if !path_buf.is_dir() {
+            return InstallationDetection {
+                status: InstallationStatus::InvalidPath,
+                mode: InstallationMode::FreshInstall,
+                normalized_path,
+                exe_path: None,
+                content_path: None,
+                datasmith_path: None,
+                custom_path: None,
+                save_path: None,
+                message: "The selected path is not a folder.".to_string(),
+                details: vec![format!("Path is not a directory: {}", path)],
+            };
         }
+
+        if let Err(e) = Self::check_write_access(&path_buf) {
+            return InstallationDetection {
+                status: InstallationStatus::InvalidPath,
+                mode: InstallationMode::FreshInstall,
+                normalized_path,
+                exe_path: None,
+                content_path: None,
+                datasmith_path: None,
+                custom_path: None,
+                save_path: None,
+                message: "Cannot write to the selected folder.".to_string(),
+                details: vec![format!("Write permission test failed: {}", e)],
+            };
+        }
+
+        let exe_path = Self::find_child_case_insensitive(&path_buf, exe_name);
+        let content_path = Self::find_game_content_dir(&path_buf);
+        let datasmith_path =
+            Self::find_descendant_dir_case_insensitive(&path_buf, "DatasmithContent", 8);
+        let game_dir = content_path
+            .as_ref()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf);
+        let custom_path = game_dir.as_ref().map(|p| p.join("Custom"));
+        let save_path = game_dir.as_ref().map(|p| p.join("Save"));
+
+        let is_empty = fs::read_dir(&path_buf)
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(false);
+
+        if exe_path.is_some() && content_path.is_some() {
+            return InstallationDetection {
+                status: InstallationStatus::ExistingValid,
+                mode: InstallationMode::Update,
+                normalized_path,
+                exe_path: Self::path_to_string(exe_path),
+                content_path: Self::path_to_string(content_path),
+                datasmith_path: Self::path_to_string(datasmith_path),
+                custom_path: Self::path_to_string(custom_path),
+                save_path: Self::path_to_string(save_path),
+                message: "Existing ReMakeplace installation detected.".to_string(),
+                details: vec!["Required executable and Content folder were found.".to_string()],
+            };
+        }
+
+        let game_like = exe_path.is_some()
+            || content_path.is_some()
+            || datasmith_path.is_some()
+            || Self::find_child_case_insensitive(&path_buf, "Makeplace").is_some()
+            || Self::find_child_case_insensitive(&path_buf, "MakePlace").is_some();
+
+        if game_like {
+            let mut details = Vec::new();
+            if exe_path.is_none() {
+                details.push(format!("Missing executable: {}", exe_name));
+            }
+            if content_path.is_none() {
+                details.push("Missing game content folder: Makeplace/Content".to_string());
+            }
+
+            return InstallationDetection {
+                status: InstallationStatus::ExistingIncomplete,
+                mode: InstallationMode::Update,
+                normalized_path,
+                exe_path: Self::path_to_string(exe_path),
+                content_path: Self::path_to_string(content_path),
+                datasmith_path: Self::path_to_string(datasmith_path),
+                custom_path: Self::path_to_string(custom_path),
+                save_path: Self::path_to_string(save_path),
+                message: "Existing installation appears incomplete and can be repaired."
+                    .to_string(),
+                details,
+            };
+        }
+
+        if is_empty {
+            return InstallationDetection {
+                status: InstallationStatus::FreshEmpty,
+                mode: InstallationMode::FreshInstall,
+                normalized_path,
+                exe_path: None,
+                content_path: None,
+                datasmith_path: None,
+                custom_path: Some(
+                    path_buf
+                        .join("Makeplace")
+                        .join("Custom")
+                        .to_string_lossy()
+                        .to_string(),
+                ),
+                save_path: Some(
+                    path_buf
+                        .join("Makeplace")
+                        .join("Save")
+                        .to_string_lossy()
+                        .to_string(),
+                ),
+                message: "Empty folder ready for a fresh install.".to_string(),
+                details: Vec::new(),
+            };
+        }
+
+        InstallationDetection {
+            status: InstallationStatus::InvalidPath,
+            mode: InstallationMode::FreshInstall,
+            normalized_path,
+            exe_path: None,
+            content_path: None,
+            datasmith_path: None,
+            custom_path: None,
+            save_path: None,
+            message: "This folder is not empty and does not look like ReMakeplace.".to_string(),
+            details: vec!["Choose an empty folder for a new install or the folder that contains Makeplace.exe.".to_string()],
+        }
+    }
+
+    pub fn validate_installation_structure(
+        path: &Path,
+        exe_name: &str,
+    ) -> Result<InstallationDetection> {
+        let detection = Self::detect_installation(&path.to_string_lossy(), exe_name);
+        if detection.status == InstallationStatus::ExistingValid {
+            return Ok(detection);
+        }
+
+        let detail = if detection.details.is_empty() {
+            detection.message.clone()
+        } else {
+            detection.details.join("; ")
+        };
+
+        Err(anyhow::anyhow!(
+            "Installed game files failed validation: {}",
+            detail
+        ))
+    }
+
+    pub fn find_installation_root(path: &Path, exe_name: &str) -> Option<PathBuf> {
+        let detection = Self::detect_installation(&path.to_string_lossy(), exe_name);
+        if detection.status == InstallationStatus::ExistingValid {
+            return Some(path.to_path_buf());
+        }
+
+        let entries = fs::read_dir(path).ok()?;
+        for entry in entries.flatten() {
+            let child = entry.path();
+            if child.is_dir() {
+                let detection = Self::detect_installation(&child.to_string_lossy(), exe_name);
+                if detection.status == InstallationStatus::ExistingValid {
+                    return Some(child);
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn resolve_game_data_folder(installation_path: &str, folder_name: &str) -> Result<PathBuf> {
+        let install = PathBuf::from(installation_path);
+        let content = Self::find_game_content_dir(&install)
+            .unwrap_or_else(|| install.join("Makeplace").join("Content"));
+        let game_dir = content
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| install.join("Makeplace"));
+        Ok(game_dir.join(folder_name))
     }
 
     /// Get a user-friendly description of the detected installation mode
@@ -211,14 +387,171 @@ impl ConfigManager {
         }
     }
 
-    fn get_config_path() -> PathBuf {
-        // Use current directory for config.json to maintain compatibility
-        PathBuf::from("config.json")
+    pub fn get_config_path() -> PathBuf {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let new_path = config_dir
+            .join("ReMakeplaceAutoupdater")
+            .join("config.json");
+        let legacy_path = PathBuf::from("config.json");
+
+        if !new_path.exists() && legacy_path.exists() {
+            if let Some(parent) = new_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::copy(&legacy_path, &new_path);
+        }
+
+        new_path
+    }
+
+    fn check_write_access(path: &Path) -> std::io::Result<()> {
+        let test_file = path.join(".rmp_write_test");
+        fs::write(&test_file, "test")?;
+        fs::remove_file(&test_file)
+    }
+
+    fn find_game_content_dir(path: &Path) -> Option<PathBuf> {
+        for game_dir in ["Makeplace", "MakePlace"] {
+            if let Some(dir) = Self::find_child_case_insensitive(path, game_dir) {
+                let content = Self::find_child_case_insensitive(&dir, "Content");
+                if content.as_ref().is_some_and(|p| p.is_dir()) {
+                    return content;
+                }
+            }
+        }
+        None
+    }
+
+    fn find_child_case_insensitive(path: &Path, name: &str) -> Option<PathBuf> {
+        let wanted = name.to_lowercase();
+        let entries = fs::read_dir(path).ok()?;
+        for entry in entries.flatten() {
+            let child_name = entry.file_name().to_string_lossy().to_lowercase();
+            if child_name == wanted {
+                return Some(entry.path());
+            }
+        }
+        None
+    }
+
+    fn find_descendant_dir_case_insensitive(
+        path: &Path,
+        name: &str,
+        max_depth: usize,
+    ) -> Option<PathBuf> {
+        let wanted = name.to_lowercase();
+        let mut stack = vec![(path.to_path_buf(), 0usize)];
+
+        while let Some((dir, depth)) = stack.pop() {
+            if depth > max_depth {
+                continue;
+            }
+
+            let entries = match fs::read_dir(&dir) {
+                Ok(entries) => entries,
+                Err(_) => continue,
+            };
+
+            for entry in entries.flatten() {
+                let child = entry.path();
+                if !child.is_dir() {
+                    continue;
+                }
+
+                let child_name = entry.file_name().to_string_lossy().to_lowercase();
+                if child_name == wanted {
+                    return Some(child);
+                }
+
+                stack.push((child, depth + 1));
+            }
+        }
+
+        None
+    }
+
+    fn path_to_string(path: Option<PathBuf>) -> Option<String> {
+        path.map(|p| p.to_string_lossy().to_string())
     }
 }
 
 impl Default for Config {
     fn default() -> Self {
         ConfigManager::create_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn create_valid_install(root: &Path) {
+        fs::write(root.join("Makeplace.exe"), "exe").unwrap();
+        fs::create_dir_all(root.join("MakePlace").join("Content")).unwrap();
+    }
+
+    #[test]
+    fn detects_empty_folder_as_fresh() {
+        let dir = TempDir::new().unwrap();
+        let detection =
+            ConfigManager::detect_installation(&dir.path().to_string_lossy(), "Makeplace.exe");
+        assert_eq!(detection.status, InstallationStatus::FreshEmpty);
+        assert_eq!(detection.mode, InstallationMode::FreshInstall);
+    }
+
+    #[test]
+    fn detects_valid_install_case_insensitively() {
+        let dir = TempDir::new().unwrap();
+        create_valid_install(dir.path());
+
+        let detection =
+            ConfigManager::detect_installation(&dir.path().to_string_lossy(), "makeplace.exe");
+        assert_eq!(detection.status, InstallationStatus::ExistingValid);
+        assert_eq!(detection.mode, InstallationMode::Update);
+        assert!(detection.content_path.unwrap().contains("MakePlace"));
+        assert!(detection.datasmith_path.is_none());
+    }
+
+    #[test]
+    fn detects_datasmith_when_present_but_does_not_require_it() {
+        let dir = TempDir::new().unwrap();
+        create_valid_install(dir.path());
+        fs::create_dir_all(
+            dir.path()
+                .join("MakePlace")
+                .join("Plugins")
+                .join("DatasmithContent"),
+        )
+        .unwrap();
+
+        let detection =
+            ConfigManager::detect_installation(&dir.path().to_string_lossy(), "Makeplace.exe");
+        assert_eq!(detection.status, InstallationStatus::ExistingValid);
+        assert!(detection.datasmith_path.is_some());
+    }
+
+    #[test]
+    fn detects_incomplete_install_instead_of_fresh() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("Makeplace.exe"), "exe").unwrap();
+
+        let detection =
+            ConfigManager::detect_installation(&dir.path().to_string_lossy(), "Makeplace.exe");
+        assert_eq!(detection.status, InstallationStatus::ExistingIncomplete);
+        assert_eq!(detection.mode, InstallationMode::Update);
+        assert!(detection.details.iter().any(|d| d.contains("Content")));
+    }
+
+    #[test]
+    fn finds_installation_root_under_single_top_level_folder() {
+        let dir = TempDir::new().unwrap();
+        let nested = dir.path().join("ReMakeplace-V7-50-0");
+        fs::create_dir_all(&nested).unwrap();
+        create_valid_install(&nested);
+
+        let found = ConfigManager::find_installation_root(dir.path(), "Makeplace.exe").unwrap();
+        assert_eq!(found, nested);
     }
 }

@@ -1,12 +1,28 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::io::Read;
-use std::path::Path;
+use std::io::{BufWriter, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+type ProgressCallback = Arc<dyn Fn(String) + Send + Sync>;
 
 pub struct Extractor;
 
 impl Extractor {
-    pub async fn extract_archive(archive_path: &Path, destination: &Path) -> Result<()> {
+    pub async fn extract_archive_with_progress(
+        archive_path: &Path,
+        destination: &Path,
+        progress_callback: ProgressCallback,
+    ) -> Result<()> {
+        Self::extract_archive_internal(archive_path, destination, Some(progress_callback)).await
+    }
+
+    async fn extract_archive_internal(
+        archive_path: &Path,
+        destination: &Path,
+        progress_callback: Option<ProgressCallback>,
+    ) -> Result<()> {
         if !archive_path.exists() {
             return Err(anyhow::anyhow!("Archive file does not exist"));
         }
@@ -22,146 +38,79 @@ impl Extractor {
 
         println!("Extracting archive: {}", file_name);
 
-        // Try extraction methods in order of preference
-        let mut last_error = None;
+        let mut errors = Vec::new();
 
-        // Try 7z extraction
-        match Self::try_extract_7z(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: 7z detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("7z detection failed: {}", e);
-                last_error = Some(e);
-            }
+        macro_rules! try_method {
+            ($label:literal, $future:expr) => {
+                match $future.await {
+                    Ok(()) => {
+                        println!("Successfully extracted using: {}", $label);
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        println!("{} failed: {}", $label, e);
+                        errors.push(format!("{}: {}", $label, e));
+                    }
+                }
+            };
         }
 
-        // Try ZIP extraction
-        match Self::try_extract_zip(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: ZIP detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("ZIP detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
+        try_method!(
+            "7z detection",
+            Self::try_extract_7z(archive_path, destination, progress_callback.clone())
+        );
+        try_method!(
+            "ZIP detection",
+            Self::try_extract_zip(archive_path, destination)
+        );
+        try_method!(
+            "TAR.GZ detection",
+            Self::try_extract_tar_gz(archive_path, destination)
+        );
+        try_method!(
+            "TAR.BZ2 detection",
+            Self::try_extract_tar_bz2(archive_path, destination)
+        );
+        try_method!(
+            "TAR.XZ detection",
+            Self::try_extract_tar_xz(archive_path, destination)
+        );
+        try_method!(
+            "TAR.ZST detection",
+            Self::try_extract_tar_zst(archive_path, destination)
+        );
+        try_method!(
+            "TAR detection",
+            Self::try_extract_tar(archive_path, destination)
+        );
+        try_method!(
+            "GZ detection",
+            Self::try_extract_gz(archive_path, destination)
+        );
+        try_method!(
+            "BZ2 detection",
+            Self::try_extract_bz2(archive_path, destination)
+        );
+        try_method!(
+            "XZ detection",
+            Self::try_extract_xz(archive_path, destination)
+        );
+        try_method!(
+            "ZST detection",
+            Self::try_extract_zst(archive_path, destination)
+        );
 
-        // Try TAR.GZ extraction
-        match Self::try_extract_tar_gz(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: TAR.GZ detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("TAR.GZ detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try TAR.BZ2 extraction
-        match Self::try_extract_tar_bz2(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: TAR.BZ2 detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("TAR.BZ2 detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try TAR.XZ extraction
-        match Self::try_extract_tar_xz(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: TAR.XZ detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("TAR.XZ detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try TAR.ZST extraction
-        match Self::try_extract_tar_zst(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: TAR.ZST detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("TAR.ZST detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try TAR extraction
-        match Self::try_extract_tar(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: TAR detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("TAR detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try GZ extraction
-        match Self::try_extract_gz(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: GZ detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("GZ detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try BZ2 extraction
-        match Self::try_extract_bz2(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: BZ2 detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("BZ2 detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try XZ extraction
-        match Self::try_extract_xz(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: XZ detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("XZ detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // Try ZST extraction
-        match Self::try_extract_zst(archive_path, destination).await {
-            Ok(()) => {
-                println!("Successfully extracted using: ZST detection");
-                return Ok(());
-            }
-            Err(e) => {
-                println!("ZST detection failed: {}", e);
-                last_error = Some(e);
-            }
-        }
-
-        // If we reach here, no extraction method succeeded
-        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("No extraction method succeeded")))
+        Err(anyhow::anyhow!(
+            "No extraction method succeeded: {}",
+            errors.join("; ")
+        ))
     }
 
-    async fn try_extract_7z(archive_path: &Path, destination: &Path) -> Result<()> {
+    async fn try_extract_7z(
+        archive_path: &Path,
+        destination: &Path,
+        progress_callback: Option<ProgressCallback>,
+    ) -> Result<()> {
         // Check if this is likely a 7z file
         let file_name = archive_path
             .file_name()
@@ -175,11 +124,107 @@ impl Extractor {
 
         println!("Attempting 7z extraction with sevenz-rust...");
 
-        // Try with sevenz-rust
-        sevenz_rust::decompress_file(archive_path, destination)
-            .context("Failed to extract 7z archive with sevenz-rust")?;
+        let archive_path = archive_path.to_path_buf();
+        let destination = destination.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            Self::extract_7z_sync(&archive_path, &destination, progress_callback)
+        })
+        .await
+        .context("7z extraction task failed")??;
 
         Ok(())
+    }
+
+    fn extract_7z_sync(
+        archive_path: &Path,
+        destination: &Path,
+        progress_callback: Option<ProgressCallback>,
+    ) -> Result<()> {
+        if let Some(callback) = progress_callback.as_ref() {
+            callback("Reading 7z archive index...".to_string());
+        }
+
+        sevenz_rust::decompress_file_with_extract_fn(
+            archive_path,
+            destination,
+            |entry, reader, dest| {
+                Self::extract_7z_entry(entry, reader, dest, progress_callback.as_ref())
+            },
+        )
+        .context("Failed to extract 7z archive with sevenz-rust")?;
+
+        Ok(())
+    }
+
+    fn extract_7z_entry(
+        entry: &sevenz_rust::SevenZArchiveEntry,
+        reader: &mut dyn Read,
+        dest: &PathBuf,
+        progress_callback: Option<&ProgressCallback>,
+    ) -> Result<bool, sevenz_rust::Error> {
+        if entry.is_directory() {
+            fs::create_dir_all(dest).map_err(sevenz_rust::Error::io)?;
+            return Ok(true);
+        }
+
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(sevenz_rust::Error::io)?;
+        }
+
+        let file = fs::File::create(dest).map_err(sevenz_rust::Error::io)?;
+        let mut writer = BufWriter::new(file);
+        let mut buffer = vec![0u8; 1024 * 1024];
+        let mut copied = 0u64;
+        let total = entry.size();
+        let display_name = Self::display_entry_name(entry.name());
+        let mut last_emit = Instant::now()
+            .checked_sub(Duration::from_secs(1))
+            .unwrap_or_else(Instant::now);
+
+        if let Some(callback) = progress_callback {
+            callback(format!("Extracting {}...", display_name));
+        }
+
+        loop {
+            let read = reader.read(&mut buffer).map_err(sevenz_rust::Error::io)?;
+            if read == 0 {
+                break;
+            }
+
+            writer
+                .write_all(&buffer[..read])
+                .map_err(sevenz_rust::Error::io)?;
+            copied += read as u64;
+
+            if let Some(callback) = progress_callback {
+                if total > 0 && last_emit.elapsed() >= Duration::from_millis(700) {
+                    let percent = ((copied as f64 / total as f64) * 100.0).clamp(0.0, 100.0);
+                    callback(format!("Extracting {} ({:.0}%)", display_name, percent));
+                    last_emit = Instant::now();
+                }
+            }
+        }
+
+        writer.flush().map_err(sevenz_rust::Error::io)?;
+
+        Ok(true)
+    }
+
+    fn display_entry_name(name: &str) -> String {
+        const MAX_LEN: usize = 64;
+        if name.chars().count() <= MAX_LEN {
+            return name.to_string();
+        }
+
+        let tail: String = name
+            .chars()
+            .rev()
+            .take(MAX_LEN - 3)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!("...{}", tail)
     }
 
     async fn try_extract_zip(archive_path: &Path, destination: &Path) -> Result<()> {

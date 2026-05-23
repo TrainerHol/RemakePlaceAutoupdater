@@ -1,4 +1,3 @@
-use crate::error_handler::{ErrorHandler, ErrorInfo};
 use crate::retry_manager::RetryManager;
 use anyhow::{Context, Result};
 use rand::random;
@@ -52,7 +51,6 @@ impl Downloader {
             .context("Failed to build HTTP client")?;
 
         let mut attempt: u32 = 0;
-        let mut last_error: Option<anyhow::Error> = None;
 
         loop {
             let resume_this_attempt = resume || filepath.exists();
@@ -70,12 +68,10 @@ impl Downloader {
             match result {
                 Ok(()) => return Ok(()),
                 Err(e) => {
-                    last_error = Some(e);
-
                     if attempt < retry_manager.max_retries {
-                        let should_retry = retry_manager.should_retry(last_error.as_ref().unwrap());
+                        let should_retry = retry_manager.should_retry(&e);
                         if should_retry {
-                            let reason = last_error.as_ref().unwrap().to_string();
+                            let reason = e.to_string();
                             // Notify UI about retry
                             progress_callback(ProgressInfo {
                                 percentage: 0.0,
@@ -95,14 +91,13 @@ impl Downloader {
                     }
 
                     // If we've exhausted retries or error is not retryable, bubble up a final error
-                    let final_err = last_error.unwrap();
                     if attempt >= retry_manager.max_retries {
                         return Err(anyhow::anyhow!(
                             "Download failed after retries exhausted: {}",
-                            final_err
+                            e
                         ));
                     }
-                    return Err(final_err);
+                    return Err(e);
                 }
             }
         }
@@ -515,7 +510,10 @@ impl Downloader {
     }
 
     pub fn get_cache_directory() -> PathBuf {
-        PathBuf::from("update_cache")
+        dirs::cache_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+            .join("ReMakeplaceAutoupdater")
+            .join("update_cache")
     }
 
     fn is_current_version_file(path: &Path) -> bool {
@@ -527,5 +525,21 @@ impl Downloader {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn validate_cached_file_rejects_size_mismatch() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("archive.7z");
+        fs::write(&file, vec![1u8; 2048]).unwrap();
+
+        assert!(!Downloader::validate_cached_file(&file, Some(4096)).unwrap());
+        assert!(Downloader::validate_cached_file(&file, Some(2048)).unwrap());
     }
 }

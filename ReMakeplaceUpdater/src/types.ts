@@ -1,4 +1,5 @@
 export type InstallationMode = "update" | "fresh_install";
+export type InstallationStatus = "fresh_empty" | "existing_valid" | "existing_incomplete" | "invalid_path";
 
 export interface Config {
   current_version: string;
@@ -15,7 +16,22 @@ export interface Config {
 export interface UpdateInfo {
   latest_version: string;
   download_url: string;
+  asset_name: string;
+  asset_size: number;
   is_available: boolean;
+}
+
+export interface InstallationDetection {
+  status: InstallationStatus;
+  mode: InstallationMode;
+  normalized_path: string;
+  exe_path?: string | null;
+  content_path?: string | null;
+  datasmith_path?: string | null;
+  custom_path?: string | null;
+  save_path?: string | null;
+  message: string;
+  details: string[];
 }
 
 export interface ProgressInfo {
@@ -37,6 +53,7 @@ export enum AppState {
   UP_TO_DATE = "up_to_date",
   ERROR = "error",
   FRESH_INSTALL_READY = "fresh_install_ready",
+  REPAIR_READY = "repair_ready",
   NO_INSTALLATION = "no_installation",
 }
 

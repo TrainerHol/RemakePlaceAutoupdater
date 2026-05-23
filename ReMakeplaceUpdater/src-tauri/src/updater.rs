@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct UpdateInfo {
     pub latest_version: String,
     pub download_url: String,
+    pub asset_name: String,
+    pub asset_size: u64,
     pub is_available: bool,
 }
 
@@ -15,10 +17,11 @@ struct GitHubRelease {
     assets: Vec<GitHubAsset>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct GitHubAsset {
     name: String,
     browser_download_url: String,
+    size: u64,
 }
 
 pub struct UpdateManager;
@@ -30,22 +33,26 @@ impl UpdateManager {
 
         let is_available = Self::compare_versions(&config.current_version, &latest_version)?;
 
-        let download_url = if is_available {
-            Self::find_7z_asset(&latest_release.assets).unwrap_or_else(|| "".to_string())
-        } else {
-            "".to_string()
-        };
+        let asset = Self::find_supported_asset(&latest_release.assets).ok_or_else(|| {
+            anyhow::anyhow!(
+                "No supported ReMakeplace archive was found on the latest GitHub release"
+            )
+        })?;
 
         Ok(UpdateInfo {
             latest_version,
-            download_url,
+            download_url: asset.browser_download_url,
+            asset_name: asset.name,
+            asset_size: asset.size,
             is_available,
         })
     }
 
     pub fn compare_versions(current: &str, latest: &str) -> Result<bool> {
-        let current_version =
-            semver::Version::parse(current).context("Failed to parse current version")?;
+        let current_version = match semver::Version::parse(current) {
+            Ok(version) => version,
+            Err(_) => return Ok(true),
+        };
         let latest_version =
             semver::Version::parse(latest).context("Failed to parse latest version")?;
 
@@ -76,12 +83,12 @@ impl UpdateManager {
         Ok(release)
     }
 
-    fn find_7z_asset(assets: &[GitHubAsset]) -> Option<String> {
+    fn find_supported_asset(assets: &[GitHubAsset]) -> Option<GitHubAsset> {
         // Look for .7z files first (preferred)
         for asset in assets {
             if asset.name.ends_with(".7z") {
                 println!("Found .7z asset: {}", asset.name);
-                return Some(asset.browser_download_url.clone());
+                return Some(asset.clone());
             }
         }
 
@@ -89,7 +96,7 @@ impl UpdateManager {
         for asset in assets {
             if asset.name.ends_with(".zip") {
                 println!("Found .zip asset (fallback): {}", asset.name);
-                return Some(asset.browser_download_url.clone());
+                return Some(asset.clone());
             }
         }
 
@@ -97,14 +104,14 @@ impl UpdateManager {
         for asset in assets {
             if asset.name.ends_with(".tar.gz") || asset.name.ends_with(".tgz") {
                 println!("Found .tar.gz asset (fallback): {}", asset.name);
-                return Some(asset.browser_download_url.clone());
+                return Some(asset.clone());
             }
         }
 
         for asset in assets {
             if asset.name.ends_with(".tar.zst") || asset.name.ends_with(".tar.zstd") {
                 println!("Found .tar.zst asset (fallback): {}", asset.name);
-                return Some(asset.browser_download_url.clone());
+                return Some(asset.clone());
             }
         }
 
@@ -115,5 +122,37 @@ impl UpdateManager {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn asset(name: &str, size: u64) -> GitHubAsset {
+        GitHubAsset {
+            name: name.to_string(),
+            browser_download_url: format!("https://example.invalid/{}", name),
+            size,
+        }
+    }
+
+    #[test]
+    fn compare_versions_treats_invalid_current_as_update_available() {
+        assert!(UpdateManager::compare_versions("unknown", "7.50.0").unwrap());
+    }
+
+    #[test]
+    fn supported_asset_prefers_7z_and_preserves_size() {
+        let assets = vec![asset("ReMakeplace.zip", 10), asset("ReMakeplace.7z", 20)];
+        let selected = UpdateManager::find_supported_asset(&assets).unwrap();
+        assert_eq!(selected.name, "ReMakeplace.7z");
+        assert_eq!(selected.size, 20);
+    }
+
+    #[test]
+    fn unsupported_assets_are_rejected() {
+        let assets = vec![asset("readme.txt", 10), asset("installer.exe", 20)];
+        assert!(UpdateManager::find_supported_asset(&assets).is_none());
     }
 }

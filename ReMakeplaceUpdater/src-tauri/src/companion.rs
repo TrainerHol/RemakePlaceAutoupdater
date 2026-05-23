@@ -10,8 +10,10 @@ pub struct ImportPayload {
     pub kind: String,
     pub title: String,
     pub author: String,
-    pub jsonUrl: String,
-    pub imageUrl: Option<String>,
+    #[serde(rename = "jsonUrl")]
+    pub json_url: String,
+    #[serde(rename = "imageUrl")]
+    pub image_url: Option<String>,
 }
 
 pub async fn import_design(
@@ -40,13 +42,13 @@ pub async fn import_design(
     let json_path = target_dir.join(&filename);
 
     // Download JSON
-    Downloader::download_file_with_resume(&payload.jsonUrl, &json_path, false, |_| {})
+    Downloader::download_file_with_resume(&payload.json_url, &json_path, false, |_| {})
         .await
         .context("Failed to download JSON")?;
 
     // Download image (optional)
     let mut saved_image: Option<String> = None;
-    if let Some(url) = payload.imageUrl.as_ref() {
+    if let Some(url) = payload.image_url.as_ref() {
         let images_dir = gallery::get_images_dir();
         let img_name = format!("{}.jpg", Uuid::new_v4());
         let img_path = images_dir.join(img_name);

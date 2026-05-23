@@ -1,238 +1,171 @@
-# ReMakeplace Auto-Updater 🚀
+# ReMakeplace Autoupdater
 
-A modern, native auto-updater for ReMakeplace built with Tauri (Rust + TypeScript). Download updates directly from GitHub releases with smart caching and data preservation.
+ReMakeplace Autoupdater is a Tauri desktop app for installing, updating, repairing, and launching ReMakeplace. It downloads the latest ReMakeplace game archive from GitHub, validates the extracted files, and preserves user folders such as `Custom` and `Save` during updates.
 
-## Features ✨
+It also integrates with [ffxivhousing.com](https://www.ffxivhousing.com). Designs and layouts from the site can be opened in the updater and downloaded directly into the selected ReMakeplace install: layouts go to `Save`, and other designs go to `Custom`.
 
-- **🔒 Data Preservation**: Automatically preserves Custom, Makeplace Config, and Save folders
-- **⚙️ Easy Setup**: Browse and configure installation path with validation
+## Download
 
-## Installation Guide 📦
+Get the latest updater from the [Releases page](https://github.com/TrainerHol/RemakePlaceAutoupdater/releases). Release assets are built from the GitHub Actions workflow for Windows x64, Linux x64, macOS Apple Silicon, and macOS Intel.
 
-### For New Users (Fresh Installation)
+- Windows x64: use the setup `.exe` or `.msi` installer from the release, or `ReMakeplace.Autoupdater_<version>_portable_windows_x64.exe` if you want a portable updater.
+- macOS Apple Silicon: use the Apple Silicon `.dmg`, or `ReMakeplace.Autoupdater_<version>_portable_macos_aarch64.app.tar.gz`.
+- macOS Intel: use the Intel `.dmg`, or `ReMakeplace.Autoupdater_<version>_portable_macos_x64.app.tar.gz`.
+- Linux x64: use the `.AppImage`, `.deb`, `.rpm`, or `ReMakeplace.Autoupdater_<version>_portable_linux_x64.tar.gz`.
 
-If you don't have ReMakeplace installed yet, the updater can handle everything for you!
+Linux users still need Wine to launch ReMakeplace, because ReMakeplace itself is a Windows executable. The updater installs and repairs the game files normally, then launches with `wine Makeplace.exe` from the selected install folder. If Wine is missing, the app shows a Wine setup error instead of reporting a missing executable.
 
-1. **Download the Updater**
+## First Run
 
-   - Go to the [Releases page](https://github.com/TrainerHol/RemakePlaceAutoupdater/releases)
-   - Download the file for your operating system:
-     - **Windows**: Download `remakeplaceupdater-setup.msi` (installer) or `remakeplaceupdater-portable.exe` (no installation needed)
-     - **macOS**: Download `remakeplaceupdater.dmg` (installer) or `remakeplaceupdater.app.tar.gz` (portable)
-     - **Linux**: Download `remakeplaceupdater.AppImage` (works on most distributions)
+When the app opens, choose an installation folder.
 
-2. **Run the Updater**
+- Pick an empty folder for a new install.
+- Pick the folder that contains `Makeplace.exe` for an existing install.
+- If the folder looks like ReMakeplace but is missing required files, the app will offer a repair instead of treating it as a fresh install.
 
-   - Double-click the downloaded file
-   - If Windows shows a security warning, click "More info" then "Run anyway" (this is normal for new apps)
+The main screen shows the selected install path, the stored current version, the latest available version, and the validation state for the selected folder. The current version is the version recorded in the updater config. If the folder cannot be validated, that version is shown as unverified instead of being hidden.
 
-3. **Choose Installation Location**
+## Updating And Repairing
 
-   - When the app opens, you'll see "Welcome to ReMakeplace Launcher"
-   - Click the "Browse" button
-   - Select or create a folder where you want ReMakeplace installed (e.g., `C:\Games\ReMakeplace`)
-   - The app will show "✅ Valid folder for fresh installation"
-   - Click "Save"
+For normal updates, click `Update Now`. The updater backs up configured user data, extracts the downloaded archive into a staging folder, validates the staged game structure, copies the files into the install folder, restores user data, and only then saves the new version.
 
-4. **Install ReMakeplace**
-   - The app will check for the latest version
-   - Click "Install Now" (green button)
-   - A confirmation dialog will show the installation location - click "Yes" to proceed
-   - Wait for the download and installation to complete
-   - Once done, click "Launch ReMakeplace" to start playing!
+For repairs, click `Repair Install`. Repairs always download the latest full archive, even when the stored current version matches the latest release. This is intentional: repairs are for missing or incomplete game files.
 
-### For Existing Users (Updates)
+The app checks for:
 
-If you already have ReMakeplace installed:
+- `Makeplace.exe`
+- `Makeplace/Content` or `MakePlace/Content`
 
-1. **Download and Run the Updater** (same as step 1 above)
+If the executable or game content folder is missing after extraction, the updater reports that directly. That can mean the archive was packaged incorrectly upstream, or that extraction failed. The message is meant to point at the missing structure without assuming which side caused it.
 
-2. **Select Your ReMakeplace Folder**
+## Folders
 
-   - Click "Browse" and navigate to your existing ReMakeplace installation
-   - The folder should contain `Makeplace.exe`
-   - The app will show "✅ Valid installation path"
-   - Click "Save"
+The main screen and Settings include shortcuts for:
 
-3. **Check for Updates**
-   - The app automatically checks if updates are available
-   - If an update is found, click "Update Now"
-   - Your saved data and custom settings are automatically preserved!
+- `Custom`
+- `Save`
+- the app config folder
 
-**Note**: You do not need to delete your itch.io Makeplace/ReMakeplace installation, it will work for updating as long as there's a Makeplace.exe file.
+The updater resolves `Custom` and `Save` from the selected ReMakeplace install. If the folders do not exist yet, opening them creates the expected folder path.
 
-### Special Cases
+The Gallery tab can open [ffxivhousing.com](https://www.ffxivhousing.com). When a design or layout is sent to the updater, the JSON file is downloaded into the correct game folder automatically: layouts are saved under `Makeplace/Save`, and designs are saved under `Makeplace/Custom`.
 
-#### "My installation shows version 0.0.0"
+## Settings
 
-If you have ReMakeplace installed but the updater shows version 0.0.0:
+Settings lets you:
 
-1. Click the settings button (⚙️)
-2. Check the "Set current version to latest" option
-3. This syncs your version without downloading the current update again.
+- change the install folder
+- verify or repair the selected install
+- set the recorded current version to the latest release
+- open the config folder
+- open `Custom`
+- open `Save`
 
-#### "I want to change my installation folder"
+Use `Set current version to latest` only when you know the installed game is already current but the updater config is stale, for example after a manual install.
 
-1. Click the settings button (⚙️) at any time
-2. Browse to select a new folder
-3. If you select an empty folder, the app will offer to do a fresh installation there
-4. For existing installations, you'll need to manually move/delete your files.
+## Troubleshooting
 
-### Option 2: Build from Source
+### The app says the install needs repair
 
-#### Prerequisites
+The selected folder contains some ReMakeplace files, but not enough to launch safely. Use `Repair Install`. The updater will preserve `Custom` and `Save` while restoring missing game files from the latest full archive.
 
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) 1.70+
-- Platform-specific dependencies:
-  - **Linux**: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
-  - **Windows**: No additional dependencies needed
-  - **macOS**: No additional dependencies needed
+### The app reports missing `Makeplace/Content`
 
-#### Build Steps
+The extracted or selected install folder does not contain the required game content directory. Run a repair first. If the same error happens with a fresh download, check the release archive in GitHub and report the package structure.
+
+### Linux launch fails because Wine is missing
+
+Install Wine through your Linux distribution, then launch again. The updater does not bundle Wine.
+
+### The current version looks wrong
+
+The current version comes from the updater config, not from the game executable. If the install is valid and you know it is up to date, use Settings and choose `Set current version to latest`.
+
+### Downloads or updates fail
+
+Try `Clear Cache`, then update again. The updater validates cached archives by file size before reusing them, so an interrupted or mismatched download should be rejected.
+
+For unresolved issues, use [GitHub Issues](https://github.com/TrainerHol/RemakePlaceAutoupdater/issues) or the ReMakeplace [Discord community](https://discord.gg/f2VAqXKWUw).
+
+## Build From Source
+
+Requirements:
+
+- Node.js 20 or newer
+- Rust stable
+- Linux packages: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
 
 ```bash
-# Clone the repository
 git clone https://github.com/TrainerHol/RemakePlaceAutoupdater.git
 cd RemakePlaceAutoupdater/ReMakeplaceUpdater
-
-# Install dependencies
-npm install
-
-# Development mode
-npm run tauri dev
-
-# Build release
-npm run tauri build
+npm ci
+npm run tauri-dev
 ```
 
-## Troubleshooting 🛠️
+Build a release binary:
 
-### Common Issues
-
-**"The app won't open" (Windows)**
-
-- Right-click the app and select "Run as administrator"
-- Check if Windows Defender or antivirus is blocking it
-- Try the portable version instead of the installer
-
-**"Can't find installation folder"**
-
-- Look for a folder containing `Makeplace.exe`
-- Common locations:
-  - Windows: `C:\Program Files\ReMakeplace` or `C:\Games\ReMakeplace`
-  - macOS: `/Applications/ReMakeplace.app`
-  - Linux: `/home/username/ReMakeplace`
-
-**"Update failed"**
-
-- Click "Clear Cache" and try again
-- Check your internet connection
-- Temporarily disable antivirus during update
-
-**"Version shows 0.0.0"**
-
-- Go to Settings (⚙️)
-- Enable "Set current version to latest"
-- This is common for manual installations
-
-### Need More Help?
-
-Visit our [GitHub Issues](https://github.com/TrainerHol/RemakePlaceAutoupdater/issues) page or ask in the ReMakeplace [discord community](https://discord.gg/f2VAqXKWUw)!
-
-## Advanced Configuration ⚙️
-
-For advanced users, the `config.json` file can be manually edited:
-
-```json
-{
-  "current_version": "0.0.0",
-  "github_repo": "RemakePlace/app",
-  "installation_path": "",
-  "exe_path": "Makeplace.exe",
-  "preserve_folders": ["Makeplace/Custom", "Makeplace/Save"], // Also preserves config.json
-  "update_check_url": "https://api.github.com/repos/RemakePlace/app/releases/latest",
-  "last_check": "2024-01-01T00:00:00Z",
-  "auto_check": true,
-  "installation_mode": "update"
-}
+```bash
+npm run build
+npm run tauri-build
 ```
 
-### Your Data is Safe! 🔒
+Run checks:
 
-The updater automatically protects your important files during updates:
-
-- **`Makeplace/Custom/`** - All your custom house layouts and designs
-- **`Makeplace/Save/`** - Your saved game data and settings
-- **`Makeplace/config.json`** - Your ReMakeplace configuration file
-
-These folders and files are backed up before updates and restored afterward, so you never lose your creations or settings!
-
-## Development 👨‍💻
-
-### Project Structure
-
+```bash
+npm run build
+npm run test:release
+cd src-tauri
+cargo test
 ```
+
+## Project Layout
+
+```text
 ReMakeplaceUpdater/
-├── src/                    # Frontend (TypeScript)
-│   ├── main.ts            # Main application logic
-│   ├── style.css          # Styling
-│   └── types.ts           # Type definitions
-├── src-tauri/             # Backend (Rust)
+├── src/                    # Frontend TypeScript
+│   ├── main.ts
+│   ├── style.css
+│   └── types.ts
+├── src-tauri/              # Rust backend
 │   ├── src/
-│   │   ├── config.rs      # Configuration management
-│   │   ├── updater.rs     # Update checking logic
-│   │   ├── downloader.rs  # Download management
-│   │   ├── extractor.rs   # Archive extraction
-│   │   ├── launcher.rs    # Game launching
-│   │   └── lib.rs         # Main Tauri app
-│   └── tauri.conf.json    # Tauri configuration
-├── dist/                  # Built frontend
-├── package.json           # Node.js dependencies
-└── README.md             # This file
+│   │   ├── config.rs       # Config and install detection
+│   │   ├── downloader.rs   # Download and cache handling
+│   │   ├── extractor.rs    # Archive extraction
+│   │   ├── launcher.rs     # Launch behavior, including Wine on Linux
+│   │   ├── updater.rs      # GitHub release metadata
+│   │   └── lib.rs          # Tauri commands
+│   └── tauri.conf.json
+├── scripts/                # Release helper scripts
+└── public/metadata.json
 ```
 
-### Key Technologies
+## Releases
 
-- **Frontend**: TypeScript, HTML5, CSS3
-- **Backend**: Rust with Tauri framework
-- **HTTP Client**: reqwest for GitHub API and downloads
-- **Archive Handling**: sevenz-rust for 7z, zip for ZIP files
-- **Version Management**: semver for version comparison
-- **UI Framework**: Native OS webview with custom styling
+Releases are created manually from GitHub Actions.
 
-### Available Scripts
+1. Open the `Draft Release` workflow.
+2. Run it with a stable SemVer value such as `1.3.0`.
+3. Review the draft release.
+4. Publish the draft when the assets look correct.
 
-```bash
-# Development
-npm run tauri dev          # Start development server
-npm run dev               # Frontend only development
-npm run build             # Build frontend
-npm run tauri build       # Build complete application
+The workflow bumps versions in `package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock`, then creates a draft release tagged `remakeplace-updater-vX.Y.Z`.
 
-# Maintenance
-cargo clean               # Clean Rust build cache (in src-tauri/)
-npm ci                    # Clean install dependencies
-```
+The workflow matrix builds:
 
-## GitHub Actions CI/CD 🔄
+- Windows x64 on `windows-latest`
+- Linux x64 on `ubuntu-22.04`
+- macOS Apple Silicon with `--target aarch64-apple-darwin`
+- macOS Intel with `--target x86_64-apple-darwin`
 
-The repository includes automated build and release workflows:
+The draft includes Tauri installer/package outputs plus portable builds:
 
-- **Multi-platform builds**: Windows, macOS (Intel + Apple Silicon), Linux
-- **Automatic releases**: Triggered by version tags (`v*`)
-- **Draft releases**: For non-tag pushes
-- **Asset uploading**: All platform binaries included
+- Windows x64 setup `.exe` and `.msi` installer assets from Tauri, plus `ReMakeplace.Autoupdater_<version>_portable_windows_x64.exe`
+- Linux x64 `.AppImage`, `.deb`, and `.rpm`, plus `ReMakeplace.Autoupdater_<version>_portable_linux_x64.tar.gz`
+- macOS Apple Silicon `.dmg`, plus `ReMakeplace.Autoupdater_<version>_portable_macos_aarch64.app.tar.gz`
+- macOS Intel `.dmg`, plus `ReMakeplace.Autoupdater_<version>_portable_macos_x64.app.tar.gz`
 
-To create a release:
+Portable assets are uploaded to the exact draft release tag produced by the workflow.
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
+## License
 
-## License 📄
-
-This updater is provided as-is for the ReMakeplace community. Use at your own risk. Feel free to modify and distribute.
-
----
+This updater is provided as-is for the ReMakeplace community. Use it at your own risk. You may modify and distribute it.

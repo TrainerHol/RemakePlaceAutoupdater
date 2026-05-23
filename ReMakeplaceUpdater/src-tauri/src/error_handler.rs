@@ -29,7 +29,12 @@ pub struct ErrorHandler;
 impl ErrorHandler {
     /// Categorizes an error and provides detailed information for the user
     pub fn categorize_error(error: &Error) -> ErrorInfo {
-        let error_str = error.to_string().to_lowercase();
+        let error_str = error
+            .chain()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ")
+            .to_lowercase();
         let error_chain = error
             .chain()
             .map(|e| e.to_string())
@@ -81,6 +86,8 @@ impl ErrorHandler {
             || error_str.contains("refused")
             || error_str.contains("reset")
             || error_str.contains("broken pipe")
+            || error_str.contains("429")
+            || error_str.contains("too many requests")
             || error_str.contains("502")
             || error_str.contains("503")
             || error_str.contains("504")
@@ -160,6 +167,12 @@ impl ErrorHandler {
             (
                 "Could not resolve the download server address.",
                 "Check your internet connection and DNS settings. Try again in a few minutes.",
+                true,
+            )
+        } else if error_str.contains("429") || error_str.contains("too many requests") {
+            (
+                "The download server is rate limiting requests.",
+                "Wait a few minutes, then try again.",
                 true,
             )
         } else if error_str.contains("502")
@@ -347,52 +360,79 @@ mod tests {
     use anyhow::anyhow;
 
     #[test]
-    fn test_network_error_categorization() {
-        let error = anyhow!("Connection timeout occurred");
+    fn categorizes_errors_by_user_recovery_behavior() {
+        let cases = [
+            (
+                anyhow!("Connection timeout occurred"),
+                ErrorCategory::Network,
+                true,
+                "timed out",
+            ),
+            (
+                anyhow!("HTTP 429 Too Many Requests"),
+                ErrorCategory::Network,
+                true,
+                "rate limiting",
+            ),
+            (
+                anyhow!("No space left on device"),
+                ErrorCategory::FileSystem,
+                false,
+                "disk space",
+            ),
+            (
+                anyhow!("Permission denied when accessing file"),
+                ErrorCategory::Permission,
+                false,
+                "Permission denied",
+            ),
+            (
+                anyhow!("Downloaded file failed validation"),
+                ErrorCategory::Validation,
+                true,
+                "validation",
+            ),
+            (
+                anyhow!("Missing configuration value"),
+                ErrorCategory::Configuration,
+                false,
+                "configuration",
+            ),
+            (
+                anyhow!("Failed to extract zstd archive"),
+                ErrorCategory::Archive,
+                true,
+                "extract",
+            ),
+            (
+                anyhow!("Some random error message"),
+                ErrorCategory::Unknown,
+                false,
+                "unexpected",
+            ),
+        ];
+
+        for (error, expected_category, expected_retryable, expected_message) in cases {
+            let info = ErrorHandler::categorize_error(&error);
+            assert_eq!(info.category, expected_category, "{error}");
+            assert_eq!(info.is_retryable, expected_retryable, "{error}");
+            assert!(
+                info.user_message.contains(expected_message),
+                "message {:?} did not contain {:?}",
+                info.user_message,
+                expected_message
+            );
+        }
+    }
+
+    #[test]
+    fn categorizes_wrapped_errors_by_root_cause() {
+        let error = anyhow!("Connection reset by peer").context("download failed");
         let info = ErrorHandler::categorize_error(&error);
 
         assert_eq!(info.category, ErrorCategory::Network);
         assert!(info.is_retryable);
-        assert!(info.user_message.contains("timed out"));
-    }
-
-    #[test]
-    fn test_permission_error_categorization() {
-        let error = anyhow!("Permission denied when accessing file");
-        let info = ErrorHandler::categorize_error(&error);
-
-        assert_eq!(info.category, ErrorCategory::Permission);
-        assert!(!info.is_retryable);
-        assert!(info.user_message.contains("Permission denied"));
-    }
-
-    #[test]
-    fn test_filesystem_error_categorization() {
-        let error = anyhow!("No space left on device");
-        let info = ErrorHandler::categorize_error(&error);
-
-        assert_eq!(info.category, ErrorCategory::FileSystem);
-        assert!(!info.is_retryable);
-        assert!(info.user_message.contains("disk space"));
-    }
-
-    #[test]
-    fn test_archive_error_categorization() {
-        let error = anyhow!("Failed to extract zstd archive");
-        let info = ErrorHandler::categorize_error(&error);
-
-        assert_eq!(info.category, ErrorCategory::Archive);
-        assert!(info.is_retryable);
-        assert!(info.user_message.contains("extract"));
-    }
-
-    #[test]
-    fn test_unknown_error_categorization() {
-        let error = anyhow!("Some random error message");
-        let info = ErrorHandler::categorize_error(&error);
-
-        assert_eq!(info.category, ErrorCategory::Unknown);
-        assert!(!info.is_retryable);
-        assert!(info.user_message.contains("unexpected"));
+        assert!(info.technical_details.contains("download failed"));
+        assert!(info.technical_details.contains("Connection reset by peer"));
     }
 }

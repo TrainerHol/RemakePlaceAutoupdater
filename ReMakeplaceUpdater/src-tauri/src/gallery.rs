@@ -100,17 +100,26 @@ pub fn get_images_dir() -> PathBuf {
 pub fn delete_entry(id: &str) -> Result<()> {
     let conn = Connection::open(get_db_path()).context("Failed to open DB for delete")?;
     // fetch paths to remove files after deletion
-    let mut stmt = conn.prepare("SELECT json_path, image_path FROM designs WHERE id = ?1")
+    let mut stmt = conn
+        .prepare("SELECT json_path, image_path FROM designs WHERE id = ?1")
         .context("Prepare select for delete failed")?;
-    let mut rows = stmt.query(params![id]).context("Select for delete query failed")?;
-    let (json_path, image_path): (Option<String>, Option<String>) = if let Some(row) = rows.next()? {
-        (row.get(0).ok(), row.get(1).ok())
-    } else {
-        (None, None)
-    };
+    let mut rows = stmt
+        .query(params![id])
+        .context("Select for delete query failed")?;
+    let (json_path, image_path): (Option<String>, Option<String>) =
+        if let Some(row) = rows.next()? {
+            (row.get(0).ok(), row.get(1).ok())
+        } else {
+            (None, None)
+        };
     drop(rows);
-    conn.execute("DELETE FROM designs WHERE id = ?1", params![id]).context("Failed to delete gallery entry")?;
-    if let Some(p) = json_path { let _ = std::fs::remove_file(p); }
-    if let Some(p) = image_path { let _ = std::fs::remove_file(p); }
+    conn.execute("DELETE FROM designs WHERE id = ?1", params![id])
+        .context("Failed to delete gallery entry")?;
+    if let Some(p) = json_path {
+        let _ = std::fs::remove_file(p);
+    }
+    if let Some(p) = image_path {
+        let _ = std::fs::remove_file(p);
+    }
     Ok(())
 }

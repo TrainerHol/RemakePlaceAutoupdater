@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: ./ReMakeplaceUpdater/package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        working-directory: ./ReMakeplaceUpdater
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: ./ReMakeplaceUpdater
+        run: npm run build
+
+      - name: Run release helper tests
+        working-directory: ./ReMakeplaceUpdater
+        run: npm run test:release
+
+      - name: Run Rust tests
+        working-directory: ./ReMakeplaceUpdater/src-tauri
+        run: cargo test
