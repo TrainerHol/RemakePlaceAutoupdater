@@ -77,6 +77,12 @@ The extracted or selected install folder does not contain the required game cont
 
 Install Wine through your Linux distribution, then launch again. The updater does not bundle Wine.
 
+### Linux launch fails with error 71 (protocol error) dispatching to wayland display
+
+This is due to a bug on Nvidia systems with WebkitGTK. Launch the application with the following environment variable `__NV_DISABLE_EXPLICIT_SYNC=1`.
+
+If that doesn't work try the [known workarounds here](https://v2.tauri.app/develop/debug/linux-graphics/#workarounds).
+
 ### The current version looks wrong
 
 The current version comes from the updater config, not from the game executable. If the install is valid and you know it is up to date, use Settings and choose `Set current version to latest`.
